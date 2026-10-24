@@ -1,0 +1,753 @@
+:root {
+  --sfondo: #f2f4f0;
+  --superficie: #ffffff;
+  --testo: #1e3a3c;
+  --tenue: #5d7372;
+  --linea: #d6ddd8;
+  --sole: #f0b400;
+  --sole-velo: rgba(240, 180, 0, 0.22);
+  --cielo: #9cb7bf;
+  --crepuscolo: #36346a;
+  --crepuscolo-velo: #e6e5f2;
+  --persona-1: #a63d66;
+  --persona-2: #2e6a8a;
+  --persona-3: #8a5a2e;
+  --insieme: #5e7330;
+  --errore: #a1301f;
+  --raggio: 14px;
+  --barra: 64px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sfondo: #13252b;
+    --superficie: #1a3038;
+    --testo: #e3ebe8;
+    --tenue: #9db1ae;
+    --linea: #2c4650;
+    --sole: #f5c02b;
+    --sole-velo: rgba(245, 192, 43, 0.16);
+    --cielo: #5c7f8a;
+    --crepuscolo: #bdb9f2;
+    --crepuscolo-velo: #26284a;
+    --persona-1: #e07aa2;
+    --persona-2: #6fb2d6;
+    --persona-3: #d29a62;
+    --insieme: #a8c26a;
+    --errore: #f08a78;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--sfondo);
+  color: var(--testo);
+  font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid var(--persona-2);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* --- Struttura ---------------------------------------------------------- */
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) 16px calc(var(--barra) + env(safe-area-inset-bottom) + 24px);
+}
+
+.testata {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 0 8px;
+}
+
+.testata h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.io {
+  border: 1px solid var(--linea);
+  background: var(--superficie);
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 0.9rem;
+}
+
+.schede {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: var(--superficie);
+  border-top: 1px solid var(--linea);
+}
+
+.schede button {
+  flex: 0 1 180px;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  border-radius: 10px;
+  font-weight: 700;
+  color: var(--tenue);
+}
+
+.schede button[aria-current="page"] {
+  color: var(--testo);
+  background: var(--sfondo);
+}
+
+.attesa,
+.vuoto {
+  color: var(--tenue);
+  padding: 24px 0;
+}
+
+.errore {
+  color: var(--errore);
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+button.testo {
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  color: var(--persona-2);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.primario {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 18px;
+  min-height: 44px;
+  background: var(--testo);
+  color: var(--sfondo);
+  font-weight: 700;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* --- Arco del giorno ------------------------------------------------------ */
+
+.arco {
+  margin: 8px 0 4px;
+}
+
+.arco svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.arco-cielo {
+  fill: none;
+  stroke: var(--cielo);
+  stroke-width: 2;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+}
+
+.arco-fascia {
+  fill: var(--sole-velo);
+}
+
+.arco-orizzonte {
+  stroke: var(--testo);
+  stroke-width: 1.5;
+}
+
+.arco-sole {
+  fill: var(--sole);
+}
+
+.arco-adesso {
+  stroke: var(--crepuscolo);
+  stroke-width: 2;
+}
+
+.arco-ora {
+  fill: var(--tenue);
+  font-size: 10px;
+}
+
+.arco-etichetta {
+  fill: var(--testo);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.arco-etichetta.sabato {
+  fill: var(--crepuscolo);
+}
+
+/* --- Oggi ------------------------------------------------------------------ */
+
+.avvisi {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 20px;
+}
+
+.avviso {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--raggio);
+  font-size: 0.95rem;
+}
+
+.avviso.sole {
+  background: var(--sole-velo);
+  border-left: 4px solid var(--sole);
+}
+
+.avviso.sabato {
+  background: var(--crepuscolo-velo);
+  color: var(--crepuscolo);
+  font-weight: 700;
+}
+
+.gruppo {
+  margin-bottom: 24px;
+}
+
+.gruppo h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.gruppo h2 .totale {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--tenue);
+  font-size: 0.9rem;
+}
+
+.gruppo.ritardo h2 {
+  color: var(--errore);
+}
+
+.pallino {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--colore);
+  flex: none;
+}
+
+.elenco {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--linea);
+}
+
+.elenco li {
+  display: grid;
+  grid-template-columns: 44px 3.2rem 1fr auto auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--linea);
+  transition: opacity 0.4s;
+}
+
+.elenco li.fatta {
+  opacity: 0.45;
+}
+
+.elenco li.fatta .nome {
+  text-decoration: line-through;
+}
+
+.spunta {
+  width: 30px;
+  height: 30px;
+  margin: 7px;
+  border-radius: 50%;
+  border: 2.5px solid var(--colore);
+  background: none;
+  padding: 0;
+}
+
+.spunta:not(:disabled):hover {
+  background: color-mix(in srgb, var(--colore) 18%, transparent);
+}
+
+li.fatta .spunta {
+  background: var(--colore);
+  opacity: 1;
+}
+
+.elenco .ora {
+  font-variant-numeric: tabular-nums;
+  color: var(--tenue);
+  font-size: 0.9rem;
+}
+
+.elenco .nome {
+  min-width: 0;
+}
+
+.elenco .chi {
+  color: var(--colore);
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+.segno-sole {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--sole);
+  vertical-align: 1px;
+}
+
+.elenco .minuti {
+  color: var(--tenue);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.salta {
+  border: 0;
+  background: none;
+  color: var(--tenue);
+  font-size: 0.85rem;
+  padding: 8px 4px;
+  min-height: 44px;
+}
+
+/* --- Settimana ------------------------------------------------------------ */
+
+.naviga {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 4px 0 12px;
+}
+
+.naviga h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  flex: 1;
+  text-align: center;
+}
+
+.naviga button:not(.torna) {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--linea);
+  background: var(--superficie);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.naviga .torna {
+  flex-basis: 100%;
+  border: 0;
+  background: none;
+  color: var(--persona-2);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.carico {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.barra {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr 4.5rem;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.barra .chi {
+  font-weight: 700;
+  color: var(--colore);
+}
+
+.barra .riempi {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--colore);
+  min-width: 4px;
+}
+
+.barra .quanto {
+  color: var(--tenue);
+  text-align: right;
+}
+
+.filtro {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.filtro button {
+  border: 1px solid var(--linea);
+  background: var(--superficie);
+  border-radius: 999px;
+  padding: 6px 14px;
+  min-height: 40px;
+}
+
+.filtro button[aria-pressed="true"] {
+  background: var(--testo);
+  color: var(--sfondo);
+  border-color: var(--testo);
+}
+
+.scambio {
+  margin-bottom: 8px;
+}
+
+.modulo-scambio {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--raggio);
+  background: var(--superficie);
+  border: 1px solid var(--linea);
+}
+
+.modulo-scambio label {
+  display: grid;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.modulo-scambio select {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--linea);
+  background: var(--sfondo);
+  padding: 0 10px;
+  font-weight: 400;
+}
+
+.modulo-scambio .spiega {
+  margin: 0;
+  color: var(--tenue);
+  font-size: 0.9rem;
+}
+
+.modulo-scambio .azioni {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.modulo-scambio .esito {
+  margin: 0;
+  font-weight: 700;
+}
+
+.giorni {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.giorno {
+  padding: 14px 0 10px;
+  border-top: 1px solid var(--linea);
+}
+
+.giorno h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+}
+
+.giorno.oggi h3 {
+  font-size: 1.25rem;
+}
+
+.etichetta-oggi {
+  font-size: 0.8rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--testo);
+  color: var(--sfondo);
+}
+
+.giorno .tramonto {
+  font-weight: 400;
+  font-size: 0.9rem;
+  color: var(--crepuscolo);
+}
+
+.giorno.sab {
+  background: linear-gradient(var(--crepuscolo-velo), transparent 70%);
+  border-radius: var(--raggio) var(--raggio) 0 0;
+  padding-left: 10px;
+  padding-right: 10px;
+  margin: 0 -10px;
+}
+
+.giorno ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.giorno li {
+  display: grid;
+  grid-template-columns: 3.2rem 12px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 0.95rem;
+}
+
+.giorno li .ora {
+  color: var(--tenue);
+  font-variant-numeric: tabular-nums;
+}
+
+.giorno li .pallino {
+  width: 9px;
+  height: 9px;
+  align-self: center;
+}
+
+.giorno li em {
+  font-style: normal;
+  color: var(--crepuscolo);
+  font-size: 0.85rem;
+}
+
+.giorno li .minuti {
+  color: var(--tenue);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.vuoto-giorno {
+  margin: 0;
+  color: var(--tenue);
+}
+
+/* --- Spesa ------------------------------------------------------------------ */
+
+.aggiungi {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.aggiungi input {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--linea);
+  background: var(--superficie);
+  padding: 0 14px;
+}
+
+.spesa {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--linea);
+}
+
+.spesa li {
+  border-bottom: 1px solid var(--linea);
+}
+
+.spesa label {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  cursor: pointer;
+}
+
+.spesa input[type="checkbox"] {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin: 0 0 0 4px;
+  border: 2.5px solid var(--testo);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.spesa input[type="checkbox"]:checked {
+  background: var(--testo);
+}
+
+.spesa input[type="checkbox"]:checked::after {
+  content: "";
+  width: 6px;
+  height: 12px;
+  border: solid var(--sfondo);
+  border-width: 0 3px 3px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.spesa .nome {
+  flex: 1;
+}
+
+.spesa .quantita {
+  color: var(--tenue);
+  font-variant-numeric: tabular-nums;
+  padding-right: 4px;
+}
+
+.spesa li.presa .nome {
+  color: var(--tenue);
+  text-decoration: line-through;
+}
+
+.togli {
+  margin-top: 12px;
+}
+
+/* --- Accesso ------------------------------------------------------------------ */
+
+.accesso {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 18vh 24px 40px;
+}
+
+.accesso h1 {
+  margin: 0 0 4px;
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.accesso > p {
+  margin: 0 0 20px;
+  color: var(--tenue);
+  font-size: 1.1rem;
+}
+
+.chi-sei {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.chi-sei button {
+  min-height: 72px;
+  border-radius: var(--raggio);
+  border: 2.5px solid var(--colore);
+  background: var(--superficie);
+  color: var(--colore);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.chi-sei button[aria-pressed="true"] {
+  background: var(--colore);
+  color: var(--superficie);
+}
+
+.accesso form {
+  display: grid;
+  gap: 12px;
+}
+
+.accesso label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.accesso input {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--linea);
+  background: var(--superficie);
+  padding: 0 14px;
+}
+
+/* --- Schermi larghi ------------------------------------------------------------ */
+
+@media (min-width: 900px) {
+  .schede {
+    position: sticky;
+    top: 0;
+    border-top: 0;
+    border-bottom: 1px solid var(--linea);
+  }
+
+  .app {
+    padding-bottom: 40px;
+  }
+}

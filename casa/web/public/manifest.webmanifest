@@ -1,0 +1,14 @@
+{
+  "name": "Casa",
+  "short_name": "Casa",
+  "lang": "it",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f2f4f0",
+  "theme_color": "#f2f4f0",
+  "icons": [
+    { "src": "/icona.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icona-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

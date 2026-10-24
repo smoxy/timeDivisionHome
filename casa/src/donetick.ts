@@ -81,6 +81,19 @@ export class Donetick {
     return this.chiama<Membro[]>("GET", "/circles/members");
   }
 
+  // L'utente a cui appartiene il token
+  profilo() {
+    return this.chiama<{ id: number; username: string; displayName: string }>("GET", "/users/profile");
+  }
+
+  richiesteDiIngresso() {
+    return this.chiama<{ id: number; userId: number; username: string; displayName: string }[]>("GET", "/circles/members/requests");
+  }
+
+  accettaIngresso(idRichiesta: number) {
+    return this.chiama<unknown>("PUT", `/circles/members/requests/accept?requestId=${idRichiesta}`);
+  }
+
   // Storico di tutta la cerchia negli ultimi giorni
   storico(giorni = 2) {
     return this.chiama<Storico[]>("GET", `/chores/history?limit=${giorni}&members=true`);

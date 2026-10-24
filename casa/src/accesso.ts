@@ -7,12 +7,13 @@ const DURATA_SESSIONE_MS = 60 * 24 * 60 * 60_000; // 60 giorni
 export function hashPassword(password: string): string {
   const sale = randomBytes(16);
   const hash = scryptSync(password, sale, 32);
-  return `scrypt$${sale.toString("hex")}$${hash.toString("hex")}`;
+  // Separatore ":" e non "$": Docker Compose interpreta i "$" nei file .env come variabili
+  return `scrypt:${sale.toString("hex")}:${hash.toString("hex")}`;
 }
 
 export function verificaPassword(password: string, salvato: string | undefined): boolean {
   if (!salvato) return false;
-  const [tipo, saleHex, hashHex] = salvato.split("$");
+  const [tipo, saleHex, hashHex] = salvato.split(/[:$]/);
   if (tipo !== "scrypt" || !saleHex || !hashHex) return false;
   const atteso = Buffer.from(hashHex, "hex");
   const calcolato = scryptSync(password, Buffer.from(saleHex, "hex"), atteso.length);

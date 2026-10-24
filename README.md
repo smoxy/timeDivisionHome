@@ -22,7 +22,8 @@ Donetick e Grocy restano originali, aggiornati dalle loro immagini Docker: non s
 | `faccende.esempio.yaml` | Catalogo di esempio con dati inventati: chi fa cosa, quando e quanto dura |
 | `faccende.yaml` | Il catalogo vero di casa. Si crea copiando l'esempio e resta fuori dal repository |
 | `confronto-backend.md` | Perché Donetick e Grocy |
-| `docker-compose.yml` | Donetick, Grocy e Casa |
+| `docker-compose.yml` | Donetick, Grocy e Casa, senza porte pubblicate: si raggiungono dal reverse proxy |
+| `compose.porte.yaml` | Solo per prove in locale: apre le porte su 127.0.0.1 |
 | `casa/src` | Il servizio Casa (Node 24, TypeScript eseguito direttamente) |
 | `casa/web` | L'interfaccia (React e Vite), installabile sul telefono come app |
 | `casa/test` | Test del calendario, dei tramonti e del sabato, sul catalogo di esempio |
@@ -43,19 +44,19 @@ Donetick e Grocy restano originali, aggiornati dalle loro immagini Docker: non s
    mkdir -p data/casa
    ```
 
-3. Avviare Donetick e Grocy:
+3. Avviare Donetick e Grocy (in locale aggiungere `-f docker-compose.yml -f compose.porte.yaml`):
 
    ```bash
    docker compose up -d donetick grocy
    ```
 
-4. **Donetick** (porta 2021):
+4. **Donetick**, dal suo indirizzo sul proxy (in locale porta 2021):
    1. Chi farà da amministratore crea per primo il suo account.
    2. Le altre persone creano il loro e chiedono di entrare con il codice di invito, che l'amministratore trova nelle impostazioni e poi accetta.
    3. Il nome visualizzato o lo username di ciascuno devono coincidere con i nomi in `meta.persone`.
    4. Ognuno crea un token API (Impostazioni, Token API) e lo mette in `DONETICK_TOKEN_<NOME>`, con il nome in maiuscolo.
    5. Infine mettere `DONETICK_SIGNUP_DISABLED=true`.
-5. **Grocy** (porta 9283):
+5. **Grocy**, dal suo indirizzo sul proxy (in locale porta 9283):
    1. Aprire la pagina una volta, così si crea il database.
    2. Entrare con admin / admin e **cambiare subito la password**.
    3. Creare una chiave API dal menu utente (Gestisci chiavi API) e metterla in `GROCY_API_KEY`.
@@ -83,7 +84,13 @@ Donetick e Grocy restano originali, aggiornati dalle loro immagini Docker: non s
    docker compose up -d
    ```
 
-   Casa risponde sulla porta 8080. Sul dominio pubblico va messa dietro un reverse proxy con HTTPS: il cookie di sessione è `Secure`. Per provare in locale senza HTTPS si può mettere `CASA_COOKIE_SECURE=false`.
+   Nessun servizio pubblica porte sull'host. Si agganciano alla rete Docker del reverse proxy indicata in `PROXY_NETWORK`, dove rispondono con i nomi `timedivision-casa:8080`, `timedivision-donetick:2021` e `timedivision-grocy:80`. Il proxy deve servirli in HTTPS, perché il cookie di sessione di Casa è `Secure`.
+
+   Per provare in locale senza proxy e senza HTTPS, mettere `CASA_COOKIE_SECURE=false` e avviare così:
+
+   ```bash
+   docker compose -f docker-compose.yml -f compose.porte.yaml up -d
+   ```
 
 Su iPhone e iPad si apre l'indirizzo in Safari e si sceglie "Aggiungi alla schermata Home".
 

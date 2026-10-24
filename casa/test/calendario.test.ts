@@ -86,3 +86,12 @@ function dateOf(t: Date) {
   const s = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" }).format(t);
   return leggiGiorno(s);
 }
+
+test("hash delle password senza $ e compatibile con il formato vecchio", async () => {
+  const { hashPassword, verificaPassword } = await import("../src/accesso.ts");
+  const h = hashPassword("una password di prova");
+  assert.ok(!h.includes("$"));
+  assert.ok(verificaPassword("una password di prova", h));
+  assert.ok(!verificaPassword("sbagliata", h));
+  assert.ok(verificaPassword("una password di prova", h.replaceAll(":", "$")));
+});

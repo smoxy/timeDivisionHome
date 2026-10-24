@@ -1,11 +1,13 @@
 name: casa
 
+# Nessuna porta pubblicata: i tre servizi si raggiungono solo dal reverse proxy,
+# che sta sulla rete esterna PROXY_NETWORK (sul server: nginx_bridge).
+# Per provare in locale senza proxy: docker compose -f docker-compose.yml -f compose.porte.yaml up -d
+
 services:
   donetick:
     image: donetick/donetick:${DONETICK_TAG:-latest}
     restart: unless-stopped
-    ports:
-      - "${DONETICK_BIND:-127.0.0.1}:2021:2021"
     volumes:
       - ./data/donetick:/donetick-data
     environment:
@@ -16,6 +18,11 @@ services:
       DT_SERVER_PUBLIC_HOST: ${DONETICK_PUBLIC_URL:-}
       DT_TELEGRAM_TOKEN: ${DONETICK_TELEGRAM_TOKEN:-}
       TZ: Europe/Rome
+    networks:
+      default: {}
+      proxy:
+        aliases: [timedivision-donetick]
+    security_opt: [no-new-privileges:true]
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:2021/api/v1/health || exit 1
       start_period: 30s
@@ -26,14 +33,16 @@ services:
   grocy:
     image: lscr.io/linuxserver/grocy:${GROCY_TAG:-latest}
     restart: unless-stopped
-    ports:
-      - "${GROCY_BIND:-127.0.0.1}:9283:80"
     volumes:
       - ./data/grocy:/config
     environment:
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
       TZ: Europe/Rome
+    networks:
+      default: {}
+      proxy:
+        aliases: [timedivision-grocy]
 
   casa:
     build: ./casa
@@ -41,8 +50,6 @@ services:
     depends_on:
       - donetick
       - grocy
-    ports:
-      - "${CASA_BIND:-0.0.0.0}:8080:8080"
     volumes:
       - ./faccende.yaml:/app/faccende.yaml:ro
       - ./data/casa:/data
@@ -53,3 +60,17 @@ services:
       DONETICK_URL: http://donetick:2021
       GROCY_URL: http://grocy:80
       TZ: Europe/Rome
+    networks:
+      default: {}
+      proxy:
+        aliases: [timedivision-casa]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+networks:
+  default: {}
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-nginx_bridge}

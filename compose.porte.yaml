@@ -1,0 +1,10 @@
+# Solo per prove in locale senza reverse proxy: apre le porte su 127.0.0.1.
+#   docker network create nginx_bridge   (una volta, se la rete del proxy non esiste)
+#   docker compose -f docker-compose.yml -f compose.porte.yaml up -d
+services:
+  donetick:
+    ports: ["127.0.0.1:2021:2021"]
+  grocy:
+    ports: ["127.0.0.1:9283:80"]
+  casa:
+    ports: ["127.0.0.1:8080:8080"]

@@ -1,0 +1,55 @@
+name: casa
+
+services:
+  donetick:
+    image: donetick/donetick:${DONETICK_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${DONETICK_BIND:-127.0.0.1}:2021:2021"
+    volumes:
+      - ./data/donetick:/donetick-data
+    environment:
+      DT_ENV: selfhosted
+      DT_SQLITE_PATH: /donetick-data/donetick.db
+      DT_JWT_SECRET: ${DONETICK_JWT_SECRET:?imposta DONETICK_JWT_SECRET in .env}
+      DT_IS_USER_CREATION_DISABLED: ${DONETICK_SIGNUP_DISABLED:-false}
+      DT_SERVER_PUBLIC_HOST: ${DONETICK_PUBLIC_URL:-}
+      DT_TELEGRAM_TOKEN: ${DONETICK_TELEGRAM_TOKEN:-}
+      TZ: Europe/Rome
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:2021/api/v1/health || exit 1
+      start_period: 30s
+      interval: 1m
+      timeout: 5s
+      retries: 3
+
+  grocy:
+    image: lscr.io/linuxserver/grocy:${GROCY_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${GROCY_BIND:-127.0.0.1}:9283:80"
+    volumes:
+      - ./data/grocy:/config
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: Europe/Rome
+
+  casa:
+    build: ./casa
+    restart: unless-stopped
+    depends_on:
+      - donetick
+      - grocy
+    ports:
+      - "${CASA_BIND:-0.0.0.0}:8080:8080"
+    volumes:
+      - ./faccende.yaml:/app/faccende.yaml:ro
+      - ./data/casa:/data
+    env_file: .env
+    environment:
+      CATALOG_PATH: /app/faccende.yaml
+      STATE_PATH: /data/stato.json
+      DONETICK_URL: http://donetick:2021
+      GROCY_URL: http://grocy:80
+      TZ: Europe/Rome

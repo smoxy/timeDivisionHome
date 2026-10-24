@@ -1,0 +1,248 @@
+# Esempio di catalogo delle faccende, con dati inventati.
+# Copiarlo in faccende.yaml (che resta fuori dal repository) e adattarlo alla propria casa.
+#
+# chi:      nome in meta.persone | insieme | ciascuno (ciascuno = cosa personale, una per persona)
+# giorni:   giorni della settimana in cui si fa (dom lun mar mer gio ven sab)
+# ogni:     settimana | 2 settimane | mese | 2 mesi | 3 mesi | 4 mesi | 6 mesi | anno | evento | una tantum
+# settimana: A | B per le cose ogni 2 settimane (A = la settimana di meta.settimana_A_inizia)
+# quando:   descrizione libera, per le persone
+# minuti:   durata stimata di una volta, per persona
+# sole:     usa lavatrice, asciugatrice o lavastoviglie: farla partire nella fascia di sole
+# stagione: descrizione del periodo in cui vale
+#
+# Campi letti dal servizio Casa:
+# ora:             orario della scadenza, HH:MM (ora di Roma)
+# occorrenza:      1 | 2 | 3 | 4 | ultima — N-esimo giorno della settimana del mese
+# mesi:            dispari | pari | [numeri dei mesi]
+# giorno_del_mese: giorno fisso, per le cadenze di 6 mesi e annuali
+# scadenza:        data AAAA-MM-GG per le cose una tantum
+# attiva_se:       tramonto_venerdi_dopo / tramonto_venerdi_prima: HH:MM, valutato sul venerdì della settimana
+# importa:         false per le voci che non vanno in Donetick
+
+meta:
+  persone: [Anna, Luca]
+  luogo: {nome: "Roma", lat: 41.9028, lon: 12.4964, fuso: Europe/Rome}
+  inizio: 2026-10-25
+  settimana_A_inizia: 2026-10-25
+  orari:
+    Luca:
+      sede: [lun, mer]
+      remoto: [mar, gio, ven]
+    Anna:
+      universita: {lun: "8:00-13:00", mer: "8:00-13:00"}
+
+faccende:
+  - id: letto
+    nome: Fare il proprio letto
+    area: camere
+    chi: ciascuno
+    giorni: [dom, lun, mar, mer, gio, ven]
+    ogni: settimana
+    minuti: 5
+    ora: "07:30"
+  - id: riunione
+    nome: Riunione di casa - menù della settimana e lista della spesa
+    area: spesa
+    chi: insieme
+    giorni: [gio]
+    ogni: settimana
+    minuti: 15
+    ora: "13:30"
+  - id: spesa
+    nome: Spesa grande
+    area: spesa
+    chi: Luca
+    giorni: [gio]
+    ogni: settimana
+    minuti: 75
+    ora: "18:00"
+  - id: cena
+    nome: Cucinare la cena
+    area: cucina
+    chi: Anna
+    giorni: [lun, mar, mer, gio]
+    ogni: settimana
+    minuti: 45
+    ora: "19:00"
+  - id: cucina-cena
+    nome: Pulire la cucina dopo cena e programmare la lavastoviglie alle 11:00
+    area: cucina
+    chi: Luca
+    giorni: [lun, mar, mer, gio]
+    ogni: settimana
+    minuti: 20
+    ora: "20:30"
+    sole: true
+  - id: cena-sabato
+    nome: Cena semplice dopo il tramonto del sabato
+    area: cucina
+    chi: Luca
+    giorni: [sab]
+    ogni: settimana
+    minuti: 20
+    ora: "18:00"
+  - id: bucato
+    nome: Lavatrice, asciugatrice, piegare e mettere via
+    area: bucato
+    chi: Anna
+    giorni: [mar]
+    ogni: settimana
+    minuti: 35
+    ora: "07:45"
+    sole: true
+  - id: robot
+    nome: Robot aspirapolvere (programmato)
+    area: pavimenti
+    chi: Luca
+    giorni: [dom, lun, mar, mer, gio, ven, sab]
+    ogni: settimana
+    minuti: 0
+    importa: false
+  - id: lavare-sotto
+    nome: Lavare a terra il piano di sotto
+    area: pavimenti
+    chi: Luca
+    giorni: [dom]
+    ogni: settimana
+    minuti: 25
+    ora: "09:00"
+    stagione: "d'inverno; il resto dell'anno si fa il venerdì dopo il lavoro"
+    attiva_se: {tramonto_venerdi_prima: "17:45"}
+  - id: prep-sabato-sera
+    nome: Preparare la casa per il sabato dopo il lavoro e lavare a terra il piano di sotto
+    area: sabato
+    chi: Luca
+    giorni: [ven]
+    ogni: settimana
+    minuti: 45
+    ora: "17:00"
+    stagione: "quando il venerdì il tramonto è dopo le 17:45"
+    attiva_se: {tramonto_venerdi_dopo: "17:45"}
+  - id: lenzuola
+    nome: Lavare e asciugare le lenzuola
+    area: bucato
+    chi: Anna
+    giorni: [dom]
+    ogni: 2 settimane
+    settimana: A
+    minuti: 20
+    ora: "09:00"
+    sole: true
+  - id: vetri
+    nome: Vetri delle finestre e specchi
+    area: pulizie
+    chi: Luca
+    giorni: [dom]
+    ogni: 2 settimane
+    settimana: A
+    minuti: 45
+    ora: "09:30"
+  - id: ragnatele
+    nome: Togliere le ragnatele
+    area: pulizie
+    chi: Luca
+    giorni: [dom]
+    ogni: 2 settimane
+    settimana: B
+    minuti: 20
+    ora: "09:30"
+  - id: bollette
+    nome: Bollette, pagamenti e produzione del fotovoltaico
+    area: amministrazione
+    chi: Luca
+    giorni: [lun]
+    ogni: mese
+    quando: 1° lunedì
+    minuti: 20
+    ora: "17:00"
+    occorrenza: 1
+  - id: ciclo-cura-lavastoviglie
+    nome: Ciclo cura lavastoviglie
+    area: manutenzione
+    chi: Luca
+    giorni: [mar]
+    ogni: 2 mesi
+    quando: 2° martedì dei mesi pari
+    minuti: 5
+    ora: "18:45"
+    sole: true
+    occorrenza: 2
+    mesi: pari
+  - id: scadenze-cibo
+    nome: Controllare cibi in scadenza e dispensa
+    area: spesa
+    chi: Anna
+    giorni: [gio]
+    ogni: mese
+    quando: ultimo giovedì
+    minuti: 20
+    ora: "12:00"
+    occorrenza: ultima
+  - id: frigo
+    nome: Pulire il frigo, prima della spesa
+    area: cucina
+    chi: Anna
+    giorni: [gio]
+    ogni: 2 mesi
+    quando: primo giovedì dei mesi dispari
+    minuti: 40
+    ora: "17:30"
+    occorrenza: 1
+    mesi: dispari
+  - id: davanzali
+    nome: Pulire i davanzali delle finestre
+    area: pulizie
+    chi: Anna
+    giorni: [lun]
+    ogni: 2 mesi
+    quando: primo lunedì dei mesi pari
+    minuti: 40
+    ora: "16:30"
+    occorrenza: 1
+    mesi: pari
+  - id: portico-lavare
+    nome: Lavare a terra portico e balcone
+    area: esterni
+    chi: insieme
+    giorni: [dom]
+    ogni: 3 mesi
+    quando: 1ª domenica di novembre, febbraio, maggio, agosto
+    minuti: 45
+    ora: "10:00"
+    occorrenza: 1
+    mesi: [11, 2, 5, 8]
+  - id: filtri-clima
+    nome: Pulire i filtri dei condizionatori
+    area: manutenzione
+    chi: Luca
+    ogni: 6 mesi
+    quando: maggio e novembre
+    minuti: 30
+    ora: "10:00"
+    mesi: [5, 11]
+    giorno_del_mese: 1
+  - id: caldaia
+    nome: Controllo annuale della caldaia
+    area: manutenzione
+    chi: Luca
+    ogni: anno
+    quando: prima dell'inverno
+    minuti: 30
+    ora: "10:00"
+    mesi: [10]
+    giorno_del_mese: 1
+  - id: camera-ospiti
+    nome: Preparare la camera degli ospiti
+    area: camere
+    chi: insieme
+    ogni: evento
+    quando: prima di una visita
+    minuti: 30
+  - id: tende
+    nome: Lavare le tende
+    area: da fare
+    chi: Anna
+    ogni: una tantum
+    minuti: 60
+    ora: "10:00"
+    scadenza: 2026-11-15

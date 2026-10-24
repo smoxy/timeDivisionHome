@@ -15,6 +15,9 @@ export type DonetickChore = {
 
 export type Membro = { userId: number; username: string; displayName: string; role: string; isActive: boolean };
 
+// status: 1 fatta, 2 saltata, 6 scadenza spostata
+export type Storico = { choreId: number; performedAt: string | null; completedBy: number; status: number };
+
 export class Donetick {
   readonly base: string;
   readonly token: string;
@@ -76,6 +79,11 @@ export class Donetick {
 
   membri() {
     return this.chiama<Membro[]>("GET", "/circles/members");
+  }
+
+  // Storico di tutta la cerchia negli ultimi giorni
+  storico(giorni = 2) {
+    return this.chiama<Storico[]>("GET", `/chores/history?limit=${giorni}&members=true`);
   }
 }
 

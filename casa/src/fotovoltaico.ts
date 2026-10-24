@@ -21,7 +21,9 @@ export function fasciaDiStagione(mese: number): { da: string; a: string } {
   return { da: "10:00", a: "16:00" };
 }
 
-async function stato(entita: string | undefined): Promise<string | undefined> {
+type Stato = { valore: string; unita?: string };
+
+async function stato(entita: string | undefined): Promise<Stato | undefined> {
   const { url, token } = config.ha;
   if (!url || !token || !entita) return undefined;
   const r = await fetch(`${url.replace(/\/$/, "")}/api/states/${entita}`, {
@@ -29,18 +31,26 @@ async function stato(entita: string | undefined): Promise<string | undefined> {
     signal: AbortSignal.timeout(5000),
   });
   if (!r.ok) throw new Error(`Home Assistant ${entita}: ${r.status}`);
-  const s = (await r.json()).state as string;
-  return s === "unknown" || s === "unavailable" ? undefined : s;
+  const dati = await r.json();
+  const valore = dati.state as string;
+  return valore === "unknown" || valore === "unavailable" ? undefined : { valore, unita: dati.attributes?.unit_of_measurement };
 }
 
-function numero(s: string | undefined): number | undefined {
-  const n = Number(s);
+function numero(s: Stato | undefined): number | undefined {
+  const n = Number(s?.valore);
   return s === undefined || Number.isNaN(n) ? undefined : n;
 }
 
-function ora(s: string | undefined): string | undefined {
+// Le integrazioni del fotovoltaico danno la potenza in W o in kW
+function watt(s: Stato | undefined): number | undefined {
+  const n = numero(s);
+  if (n === undefined) return undefined;
+  return s?.unita === "kW" ? n * 1000 : s?.unita === "MW" ? n * 1_000_000 : n;
+}
+
+function ora(s: Stato | undefined): string | undefined {
   if (!s) return undefined;
-  const t = new Date(s);
+  const t = new Date(s.valore);
   return Number.isNaN(t.getTime()) ? undefined : oraLocale(t);
 }
 
@@ -66,7 +76,7 @@ export async function leggiSole(adesso = new Date()): Promise<Sole> {
     }
     return {
       fonte: "home-assistant",
-      produzioneW: numero(potenza),
+      produzioneW: watt(potenza),
       batteriaPct: numero(batteria),
       piccoOggi: picco,
       piccoDomani: ora(piccoDomani),

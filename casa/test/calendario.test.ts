@@ -71,6 +71,12 @@ test("niente cade durante il sabato", () => {
   assert.equal(oraLocale(cena.quando), "21:19");
 });
 
+test("il concetto è l'id della voce, salvo diverso avviso", () => {
+  assert.equal(voce("letto").concetto, "letto");
+  assert.equal(voce("lavare-sotto").concetto, "lavare-sotto");
+  assert.equal(voce("prep-sabato-sera").concetto, "lavare-sotto");
+});
+
 test("ciascuno vale per tutte le persone", () => {
   const letti = occorrenze(cat, leggiGiorno("2026-10-26"), leggiGiorno("2026-10-26")).filter((o) => o.voce.id === "letto");
   assert.deepEqual(letti.map((o) => o.chi).sort(), ["Anna", "Luca"]);

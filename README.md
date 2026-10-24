@@ -9,7 +9,9 @@ Un'app per una casa condivisa: faccende, settimana, spesa e fotovoltaico, con il
   - attiva e disattiva le faccende stagionali, guardando il tramonto del venerdì;
   - rimette nei mesi giusti le faccende dei mesi pari e dispari e quelle trimestrali;
   - quando chi lavora in sede cambia giorno, sposta le sue faccende al giorno in cui resta a casa;
-  - legge da Home Assistant la produzione del fotovoltaico e suggerisce quando far partire le macchine.
+  - legge da Home Assistant la produzione del fotovoltaico e suggerisce quando far partire le macchine;
+  - riporta al giorno dopo le faccende non fatte, una volta sola: una faccenda fatta in ritardo non ricompare subito, e tra faccende con lo stesso `concetto` rimaste indietro se ne vede una;
+  - tiene una lista per persona in Home Assistant: ci mette le faccende di oggi e quelle rimaste indietro, e quando una voce viene spuntata la segna fatta in Donetick a nome di chi l'ha spuntata.
 
 Donetick e Grocy restano originali, aggiornati dalle loro immagini Docker: non sono fork.
 
@@ -94,7 +96,9 @@ Con Home Assistant servono:
 - le entità di potenza e batteria del vostro impianto, per esempio dall'integrazione FusionSolar;
 - le entità del picco previsto, dall'integrazione Forecast.Solar.
 
-Casa legge solo lo stato delle entità.
+Casa legge lo stato delle entità e, se configurate, aggiorna le liste delle faccende.
+
+**Liste per persona.** In Home Assistant si crea una "Lista di cose da fare locale" per persona, per esempio "Faccende Anna", e la si indica in `HA_TODO_<NOME>`. Ogni due minuti Casa ci mette le faccende di oggi e quelle rimaste indietro, toglie quelle fatte altrove e segna fatte in Donetick quelle spuntate in Home Assistant. Le voci aggiunte a mano nella lista non vengono toccate. In una dashboard si può dare a ciascuno una vista con la propria lista, visibile solo a quell'utente.
 
 **Notifiche su iPhone.** La PWA su iOS non riceve notifiche push. Le notifiche arrivano da Donetick, che può mandarle su Telegram o Pushover, oppure tramite l'integrazione Donetick di Home Assistant e l'app Home Assistant sul telefono.
 

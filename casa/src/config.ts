@@ -28,7 +28,9 @@ export const config = {
     batteria: env("HA_BATTERY_SOC_ENTITY"),
     piccoOggi: env("HA_PEAK_TIME_TODAY_ENTITY"),
     piccoDomani: env("HA_PEAK_TIME_TOMORROW_ENTITY"),
+    // Lista delle faccende di ciascuno: HA_TODO_ANNA=todo.faccende_anna, ...
+    todo: (persona: string) => env(`HA_TODO_${persona.toUpperCase()}`),
   },
-  // Ogni quanto girano i lavori periodici (sabato, stagioni, mesi)
-  intervalloLavoriMs: Number(process.env.CASA_JOBS_INTERVAL_MS ?? 10 * 60_000),
+  // Ogni quanto girano i lavori periodici (sabato, stagioni, mesi, ritardi, liste di Home Assistant)
+  intervalloLavoriMs: Number(process.env.CASA_JOBS_INTERVAL_MS ?? 2 * 60_000),
 };

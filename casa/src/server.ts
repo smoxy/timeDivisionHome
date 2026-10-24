@@ -12,7 +12,8 @@ import { config } from "./config.ts";
 import { type DonetickChore, leggiMarcatore, type Membro } from "./donetick.ts";
 import { leggiSole } from "./fotovoltaico.ts";
 import { Grocy } from "./grocy.ts";
-import { eseguiLavori, scambiaSede } from "./lavori.ts";
+import { type Esito, eseguiLavori, scambiaSede } from "./lavori.ts";
+import { homeAssistant, sincronizzaListe } from "./homeassistant.ts";
 import { catalogo, donetickAdmin, donetickDi, utenteDi } from "./servizi.ts";
 import { alba, sabatoCorrenteOProssimo, tramonto } from "./sole.ts";
 import { leggiStato, scriviStato } from "./stato.ts";
@@ -145,8 +146,8 @@ app.post("/api/faccende/:id/:azione{fatta|salta}", async (c) => {
   if (c.req.param("azione") === "fatta") await client.fatta(id);
   else await client.salta(id);
   // Dopo il completamento Donetick calcola la prossima scadenza: la si corregge subito
-  const cat = catalogo();
-  await eseguiLavori((await donetickAdmin(cat)).client, cat);
+  // e si aggiornano le liste di Home Assistant
+  await lavoriCompleti().catch((e) => console.error("[lavori]", (e as Error).message));
   return c.json({ ok: true });
 });
 
@@ -217,8 +218,7 @@ app.post("/api/sede/scambio", async (c) => {
 });
 
 app.post("/api/lavori", async (c) => {
-  const cat = catalogo();
-  return c.json({ esiti: await eseguiLavori((await donetickAdmin(cat)).client, cat) });
+  return c.json({ esiti: await lavoriCompleti() });
 });
 
 // --- Spesa e fotovoltaico --------------------------------------------------
@@ -274,14 +274,25 @@ async function lavoriPeriodici() {
   if (lavoriInCorso) return;
   lavoriInCorso = true;
   try {
-    const cat = catalogo();
-    const esiti = await eseguiLavori((await donetickAdmin(cat)).client, cat);
-    for (const e of esiti) console.log(`[lavori] ${e.faccenda}: ${e.azione}`);
+    for (const e of await lavoriCompleti()) console.log(`[lavori] ${e.faccenda}: ${e.azione}`);
   } catch (e) {
     console.error("[lavori]", (e as Error).message);
   } finally {
     lavoriInCorso = false;
   }
+}
+
+// Prima si raccolgono le spunte fatte in Home Assistant, poi si correggono le scadenze,
+// infine si riallineano le liste con il risultato.
+async function lavoriCompleti(): Promise<Esito[]> {
+  const cat = catalogo();
+  const { client, membri } = await donetickAdmin(cat);
+  const ha = homeAssistant();
+  const esiti: Esito[] = [];
+  if (ha) esiti.push(...(await sincronizzaListe(ha, await client.faccende(false), membri, cat)));
+  esiti.push(...(await eseguiLavori(client, cat)));
+  if (ha) esiti.push(...(await sincronizzaListe(ha, await client.faccende(false), membri, cat)));
+  return esiti;
 }
 
 setTimeout(lavoriPeriodici, 5_000);

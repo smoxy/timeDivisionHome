@@ -37,6 +37,7 @@ export type Voce = {
   stagione?: string;
   attivaSe?: { tramontoVenerdiDopo?: string; tramontoVenerdiPrima?: string };
   importa: boolean;
+  concetto: string; // voci con lo stesso concetto sono la stessa cosa: se ne mostra una sola
 };
 
 export type Catalogo = {
@@ -109,6 +110,7 @@ export function leggiCatalogo(percorso: string): Catalogo {
       stagione: f.stagione,
       attivaSe: a ? { tramontoVenerdiDopo: a.tramonto_venerdi_dopo, tramontoVenerdiPrima: a.tramonto_venerdi_prima } : undefined,
       importa: f.importa !== false,
+      concetto: String(f.concetto ?? id),
     };
   });
 

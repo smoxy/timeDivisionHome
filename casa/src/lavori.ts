@@ -1,13 +1,15 @@
 // Lavori periodici: correggono in Donetick quello che le sue ricorrenze non sanno fare.
 //  - mesi: le regole "N-esimo giorno del mese" solo nei mesi giusti (pari, dispari, ogni 3 mesi)
 //  - stagioni: archivia e ripristina le faccende con attiva_se
+//  - ritardo: una faccenda fatta in ritardo vale anche per oggi, non ricompare subito
+//  - doppioni: tra faccende con lo stesso concetto rimaste indietro se ne tiene una sola
 //  - sabato: niente scade dal tramonto del venerdì al tramonto del sabato
 
 import { attivaIl, meseAmmesso, prossima } from "./calendario.ts";
 import type { Catalogo } from "./catalogo.ts";
 import { type Donetick, type DonetickChore, leggiMarcatore } from "./donetick.ts";
 import { dopoIlSabato, nelSabato, sabatoCorrenteOProssimo, sabatoDelVenerdi } from "./sole.ts";
-import { giornoDi, sommaGiorni } from "./tempo.ts";
+import { confronta, giornoDi, istanteLocale, sommaGiorni } from "./tempo.ts";
 
 export type Esito = { faccenda: string; azione: string };
 
@@ -45,6 +47,51 @@ export async function eseguiLavori(client: Donetick, cat: Catalogo, adesso = new
       await client.spostaScadenza(c.id, p.quando);
       c.nextDueDate = p.quando.toISOString();
       esiti.push({ faccenda: c.name, azione: `spostata al mese giusto: ${p.quando.toISOString()}` });
+    }
+  }
+
+  // Ritardo: Donetick calcola la prossima scadenza da quella saltata, quindi una faccenda
+  // fatta in ritardo ricomparirebbe subito. La si porta alla prima occorrenza dopo il giorno in cui è stata fatta.
+  const fatteDi = new Map<number, Date>();
+  for (const h of await client.storico(2)) {
+    if (h.status !== 1 || !h.performedAt) continue;
+    const quando = new Date(h.performedAt);
+    if (!fatteDi.has(h.choreId) || fatteDi.get(h.choreId)! < quando) fatteDi.set(h.choreId, quando);
+  }
+  for (const c of attive) {
+    const fatta = fatteDi.get(c.id);
+    const voce = voci.get(leggiMarcatore(c)?.id ?? "");
+    if (!fatta || !voce) continue;
+    const giornoFatta = giornoDi(fatta);
+    if (confronta(giornoDi(new Date(c.nextDueDate!)), giornoFatta) > 0) continue;
+    const p = prossima(voce, istanteLocale(sommaGiorni(giornoFatta, 1)), cat);
+    if (!p) continue;
+    await client.spostaScadenza(c.id, p.quando);
+    c.nextDueDate = p.quando.toISOString();
+    esiti.push({ faccenda: c.name, azione: `fatta in ritardo, prossima il ${p.quando.toISOString()}` });
+  }
+
+  // Doppioni: per ogni persona (o "insieme") e concetto, tra le faccende scadute prima di oggi
+  // e quelle di oggi se ne tiene una sola, la più recente; le altre passano alla prossima occorrenza.
+  const fineOggi = istanteLocale(sommaGiorni(giornoDi(adesso), 1));
+  const gruppi = new Map<string, DonetickChore[]>();
+  for (const c of attive) {
+    const voce = voci.get(leggiMarcatore(c)?.id ?? "");
+    if (!voce || new Date(c.nextDueDate!) >= fineOggi) continue;
+    const chiave = `${c.assignedTo ?? "insieme"}|${voce.concetto}`;
+    gruppi.set(chiave, [...(gruppi.get(chiave) ?? []), c]);
+  }
+  for (const gruppo of gruppi.values()) {
+    if (gruppo.length < 2) continue;
+    gruppo.sort((a, b) => a.nextDueDate!.localeCompare(b.nextDueDate!));
+    const tenuta = gruppo.at(-1)!;
+    for (const c of gruppo.slice(0, -1)) {
+      const voce = voci.get(leggiMarcatore(c)!.id)!;
+      const p = prossima(voce, fineOggi, cat);
+      if (!p) continue;
+      await client.spostaScadenza(c.id, p.quando);
+      c.nextDueDate = p.quando.toISOString();
+      esiti.push({ faccenda: c.name, azione: `assorbita da "${tenuta.name}", prossima il ${p.quando.toISOString()}` });
     }
   }
 

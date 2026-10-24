@@ -96,7 +96,13 @@ function Avvisi({ dati }: { dati: DatiOggi }) {
     );
   }
   const extra = [
-    sole.batteriaPct !== undefined ? `batteria al ${Math.round(sole.batteriaPct)}%` : null,
+    sole.batteriaPct !== undefined
+      ? `batteria al ${Math.round(sole.batteriaPct)}%${
+          sole.batteriaUsabileKWh !== undefined
+            ? ` (${sole.batteriaUsabileKWh.toLocaleString("it-IT", { maximumFractionDigits: 1 })} kWh usabili)`
+            : ""
+        }`
+      : null,
     sole.produzioneW !== undefined ? `${(sole.produzioneW / 1000).toLocaleString("it-IT", { maximumFractionDigits: 1 })} kW adesso` : null,
   ].filter(Boolean);
   righe.push(

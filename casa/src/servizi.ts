@@ -14,10 +14,26 @@ export function donetickDi(persona: string): Donetick {
   return new Donetick(config.donetickUrl, token);
 }
 
+// Chi è chi in Donetick: ogni persona è l'utente a cui appartiene il suo token,
+// così non conta come si chiama l'account. Si ricalcola ogni ora.
+const idPersone = new Map<string, number>();
+let idAggiornatiIl = 0;
+
+async function aggiornaIdPersone(cat: Catalogo) {
+  if (Date.now() - idAggiornatiIl < 60 * 60_000 && idPersone.size > 0) return;
+  for (const p of cat.persone) {
+    if (!config.tokenDonetick(p)) continue;
+    const profilo = await donetickDi(p).profilo();
+    idPersone.set(p.toLowerCase(), profilo.id);
+  }
+  idAggiornatiIl = Date.now();
+}
+
 // Il client dell'amministratore della cerchia: serve per importare e per i lavori periodici.
 export async function donetickAdmin(cat: Catalogo): Promise<{ client: Donetick; membri: Membro[] }> {
   const conToken = cat.persone.filter((p) => config.tokenDonetick(p));
   if (conToken.length === 0) throw new Error("Nessun DONETICK_TOKEN_<PERSONA> configurato");
+  await aggiornaIdPersone(cat);
   const membri = await donetickDi(conToken[0]).membri();
   const admin = membri.find((m) => m.role === "admin" && m.isActive);
   const persona = conToken.find((p) => utenteDi(p, membri)?.userId === admin?.userId) ?? conToken[0];
@@ -26,7 +42,12 @@ export async function donetickAdmin(cat: Catalogo): Promise<{ client: Donetick; 
 
 export function utenteDi(persona: string, membri: Membro[]): Membro | undefined {
   const p = persona.toLowerCase();
-  return membri.find((m) => m.username.toLowerCase() === p || m.displayName.toLowerCase() === p);
+  const id = idPersone.get(p);
+  if (id !== undefined) return membri.find((m) => m.userId === id && m.isActive);
+  // Senza token: si prova con il nome, anche solo il primo del nome visualizzato
+  return membri.find(
+    (m) => m.isActive && [m.username, m.displayName, m.displayName.trim().split(/\s+/)[0]].some((n) => n.toLowerCase() === p),
+  );
 }
 
 export function idUtenti(cat: Catalogo, membri: Membro[]): Map<string, number> {

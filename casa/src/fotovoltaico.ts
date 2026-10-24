@@ -8,6 +8,7 @@ export type Sole = {
   fonte: "home-assistant" | "stagione";
   produzioneW?: number;
   batteriaPct?: number;
+  batteriaUsabileKWh?: number; // sopra la riserva minima
   piccoOggi?: string;
   piccoDomani?: string;
   fascia: { da: string; a: string };
@@ -74,10 +75,14 @@ export async function leggiSole(adesso = new Date()): Promise<Sole> {
       const a = oraLocale(new Date(t.getTime() + 3600_000));
       fascia = { da: da > stagione.da ? da : stagione.da, a: a < stagione.a ? a : stagione.a };
     }
+    const pct = numero(batteria);
+    const { batteriaKWh: capacita, batteriaRiservaPct: riserva } = config.ha;
     return {
       fonte: "home-assistant",
       produzioneW: watt(potenza),
-      batteriaPct: numero(batteria),
+      batteriaPct: pct,
+      batteriaUsabileKWh:
+        pct !== undefined && capacita > 0 ? Math.max(0, ((pct - riserva) / 100) * capacita) : undefined,
       piccoOggi: picco,
       piccoDomani: ora(piccoDomani),
       fascia,

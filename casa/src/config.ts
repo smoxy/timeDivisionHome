@@ -26,6 +26,9 @@ export const config = {
     token: env("HA_TOKEN"),
     potenza: env("HA_PV_POWER_ENTITY"),
     batteria: env("HA_BATTERY_SOC_ENTITY"),
+    // Capacità della batteria e riserva minima, per calcolare l'energia davvero usabile
+    batteriaKWh: Number(process.env.HA_BATTERY_CAPACITY_KWH ?? 0),
+    batteriaRiservaPct: Number(process.env.HA_BATTERY_RESERVE_PCT ?? 0),
     piccoOggi: env("HA_PEAK_TIME_TODAY_ENTITY"),
     piccoDomani: env("HA_PEAK_TIME_TOMORROW_ENTITY"),
     // Lista delle faccende di ciascuno: HA_TODO_ANNA=todo.faccende_anna, ...

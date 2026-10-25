@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { leggiCatalogo } from "../src/catalogo.ts";
 import { occorrenze, prossima, settimanaAB } from "../src/calendario.ts";
 import { sabatoCorrenteOProssimo, tramonto } from "../src/sole.ts";
-import { isoGiorno, leggiGiorno, oraLocale } from "../src/tempo.ts";
+import { isoGiorno, istanteLocale, leggiGiorno, oraLocale } from "../src/tempo.ts";
 
 // I test usano il catalogo di esempio, che sta nel repository; quello vero di casa no.
 const cat = leggiCatalogo(join(import.meta.dirname, "..", "..", "faccende.esempio.yaml"));
@@ -94,4 +94,45 @@ test("hash delle password senza $ e compatibile con il formato vecchio", async (
   assert.ok(verificaPassword("una password di prova", h));
   assert.ok(!verificaPassword("sbagliata", h));
   assert.ok(verificaPassword("una password di prova", h.replaceAll(":", "$")));
+});
+
+test("umido legato ai giorni in sede, predefiniti e cambiati", async () => {
+  const { leggiCatalogo: leggi } = await import("../src/catalogo.ts");
+  const c = leggi(join(import.meta.dirname, "..", "..", "faccende.esempio.yaml"));
+  const chi = (g: string) =>
+    occorrenze(c, leggiGiorno(g), leggiGiorno(g)).filter((o) => o.voce.concetto === "umido").map((o) => o.chi);
+  // settimana dal 1 novembre: predefiniti lunedì e mercoledì
+  assert.deepEqual(chi("2026-11-02"), ["Anna"]);
+  assert.deepEqual(chi("2026-11-03"), ["Luca"]);
+  assert.deepEqual(chi("2026-11-04"), ["Anna"]);
+  // in sede martedì e giovedì solo quella settimana
+  c.sedeDellaSettimana = (d) => (isoGiorno(d) === "2026-11-01" ? ["mar", "gio"] : c.sedePredefinita);
+  assert.deepEqual(chi("2026-11-02"), ["Luca"]);
+  assert.deepEqual(chi("2026-11-03"), ["Anna"]);
+  assert.deepEqual(chi("2026-11-05"), ["Anna"]);
+  assert.deepEqual(chi("2026-11-09"), ["Anna"]); // la settimana dopo torna come prima
+  // ogni giorno qualcuno butta l'umido, e mai tutti e due
+  for (const g of ["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07"]) {
+    assert.equal(chi(g).length, 1, g);
+  }
+});
+
+test("abbinamento dei giorni in sede che cambiano", async () => {
+  const { abbinaGiorni } = await import("../src/lavori.ts");
+  assert.deepEqual(abbinaGiorni(["lun", "mer"], ["mar", "gio"]), [
+    { lascia: "lun", prende: "mar" },
+    { lascia: "mer", prende: "gio" },
+  ]);
+  assert.deepEqual(abbinaGiorni(["lun", "mer"], ["lun", "ven"]), [{ lascia: "mer", prende: "ven" }]);
+  assert.deepEqual(abbinaGiorni(["lun", "mer"], ["lun", "mer"]), []);
+});
+
+test("vincoli per le proposte dell'assistente", async () => {
+  const { impedimento } = await import("../src/automazioni.ts");
+  const ora = (g: string, h: number, m = 0) => istanteLocale(leggiGiorno(g), h, m);
+  assert.match(impedimento("Luca", ora("2026-11-02", 10), cat)!, /in sede/); // lunedì in sede
+  assert.equal(impedimento("Luca", ora("2026-11-02", 20, 30), cat), null); // la sera è a casa
+  assert.match(impedimento("Anna", ora("2026-11-02", 9), cat)!, /impegno/); // università
+  assert.match(impedimento("Luca", ora("2026-11-07", 11), cat)!, /sabato/);
+  assert.equal(impedimento("Anna", ora("2026-11-03", 10), cat), null);
 });

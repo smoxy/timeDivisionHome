@@ -69,6 +69,11 @@ export class Donetick {
     return this.chiama<unknown>("PUT", `/chores/${id}/dueDate`, { dueDate: quando.toISOString(), updatedAt: attuale.updatedAt });
   }
 
+  async assegna(id: number, utente: number) {
+    const attuale = await this.faccenda(id);
+    return this.chiama<unknown>("PUT", `/chores/${id}/assignee`, { assignee: utente, updatedAt: attuale.updatedAt });
+  }
+
   archivia(id: number) {
     return this.chiama<unknown>("PUT", `/chores/${id}/archive`);
   }

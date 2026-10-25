@@ -38,6 +38,7 @@ export type Voce = {
   attivaSe?: { tramontoVenerdiDopo?: string; tramontoVenerdiPrima?: string };
   importa: boolean;
   concetto: string; // voci con lo stesso concetto sono la stessa cosa: se ne mostra una sola
+  sede?: "dentro" | "fuori"; // legata ai giorni in sede di personaConSede
 };
 
 export type Catalogo = {
@@ -45,6 +46,12 @@ export type Catalogo = {
   luogo: Luogo & { nome: string };
   settimanaA: Giorno; // domenica da cui partono le settimane A
   personaConSede?: string;
+  sedePredefinita: SiglaGiorno[];
+  fuoriCasaInSede: [string, string]; // fascia in cui chi è in sede non è a casa
+  // Impegni fissi per persona, come in meta.orari: per giorno "HH:MM-HH:MM" (universita, online, ...)
+  impegni: Record<string, Partial<Record<SiglaGiorno, string[]>>>;
+  // Giorni in sede della settimana che comincia in quella domenica (predefiniti, salvo modifiche)
+  sedeDellaSettimana: (domenica: Giorno) => SiglaGiorno[];
   faccende: Voce[];
 };
 
@@ -111,16 +118,39 @@ export function leggiCatalogo(percorso: string): Catalogo {
       attivaSe: a ? { tramontoVenerdiDopo: a.tramonto_venerdi_dopo, tramontoVenerdiPrima: a.tramonto_venerdi_prima } : undefined,
       importa: f.importa !== false,
       concetto: String(f.concetto ?? id),
+      sede: f.sede === "dentro" || f.sede === "fuori" ? f.sede : f.sede === undefined ? undefined : errore(id, `sede "${f.sede}" sconosciuta`),
     };
   });
 
+  const sedePredefinita: SiglaGiorno[] = personaConSede ? orari[personaConSede].sede : [];
   return {
     persone,
+    sedePredefinita,
+    fuoriCasaInSede: personaConSede ? (orari[personaConSede].fuori_casa_in_sede ?? ["06:00", "19:45"]) : ["06:00", "19:45"],
+    sedeDellaSettimana: () => sedePredefinita,
+    impegni: impegniDa(orari, persone),
     luogo: { nome: meta.luogo?.nome ?? "", lat: Number(meta.luogo?.lat), lon: Number(meta.luogo?.lon) },
     settimanaA: comeGiorno(meta.settimana_A_inizia),
     personaConSede,
     faccende,
   };
+}
+
+function impegniDa(orari: Record<string, any>, persone: string[]) {
+  const impegni: Catalogo["impegni"] = {};
+  for (const p of persone) {
+    const perGiorno: Partial<Record<SiglaGiorno, string[]>> = {};
+    for (const [chiave, valore] of Object.entries(orari[p] ?? {})) {
+      if (chiave === "sede" || !valore || typeof valore !== "object" || Array.isArray(valore)) continue;
+      for (const [g, fascia] of Object.entries(valore as Record<string, string>)) {
+        if (SIGLE_GIORNI.includes(g as SiglaGiorno) && /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(String(fascia))) {
+          (perGiorno[g as SiglaGiorno] ??= []).push(String(fascia));
+        }
+      }
+    }
+    impegni[p] = perGiorno;
+  }
+  return impegni;
 }
 
 // Persone a cui tocca una voce: "ciascuno" vale per tutti, "insieme" resta una sola voce condivisa.

@@ -33,7 +33,12 @@ export const config = {
     piccoDomani: env("HA_PEAK_TIME_TOMORROW_ENTITY"),
     // Lista delle faccende di ciascuno: HA_TODO_ANNA=todo.faccende_anna, ...
     todo: (persona: string) => env(`HA_TODO_${persona.toUpperCase()}`),
+    // Lista della spesa di Home Assistant: se c'è, Casa usa questa e non quella di Grocy
+    spesa: env("HA_SPESA_ENTITY"),
   },
+  // Assistente: webhook di n8n chiamato quando cambiano i giorni in sede, e token condiviso
+  n8nWebhook: env("CASA_N8N_WEBHOOK_URL"),
+  n8nToken: env("CASA_N8N_TOKEN"),
   // Ogni quanto girano i lavori periodici (sabato, stagioni, mesi, ritardi, liste di Home Assistant)
   intervalloLavoriMs: Number(process.env.CASA_JOBS_INTERVAL_MS ?? 2 * 60_000),
 };

@@ -19,6 +19,7 @@
 # attiva_se:       tramonto_venerdi_dopo / tramonto_venerdi_prima: HH:MM, valutato sul venerdì della settimana
 # importa:         false per le voci che non vanno in Donetick
 # concetto:        voci diverse che sono la stessa cosa: se una è rimasta indietro e l'altra è di oggi, se ne vede una sola
+# sede:            dentro = solo nei giorni in sede della settimana; fuori = solo nei suoi giorni che non sono in sede
 
 meta:
   persone: [Anna, Luca]
@@ -28,6 +29,7 @@ meta:
   orari:
     Luca:
       sede: [lun, mer]
+      fuori_casa_in_sede: ["06:00", "19:45"]
       remoto: [mar, gio, ven]
     Anna:
       universita: {lun: "8:00-13:00", mer: "8:00-13:00"}
@@ -99,6 +101,26 @@ faccende:
     ogni: settimana
     minuti: 0
     importa: false
+  - id: umido-luca
+    nome: Buttare l'umido
+    area: rifiuti
+    chi: Luca
+    giorni: [dom, lun, mar, mer, gio, ven, sab]
+    ogni: settimana
+    minuti: 3
+    ora: "21:30"
+    sede: fuori
+    concetto: umido
+  - id: umido-anna
+    nome: Buttare l'umido
+    area: rifiuti
+    chi: Anna
+    giorni: [lun, mer]
+    ogni: settimana
+    minuti: 3
+    ora: "21:30"
+    sede: dentro
+    concetto: umido
   - id: lavare-sotto
     nome: Lavare a terra il piano di sotto
     area: pavimenti

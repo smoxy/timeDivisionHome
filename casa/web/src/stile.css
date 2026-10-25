@@ -461,8 +461,86 @@ li.fatta .spunta {
   border-color: var(--testo);
 }
 
-.scambio {
-  margin-bottom: 8px;
+.sede {
+  margin: 4px 0 12px;
+}
+
+.sede h3 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.sede .diversi {
+  font-size: 0.8rem;
+  font-weight: 400;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--sole-velo);
+}
+
+.giorni-sede {
+  display: flex;
+  gap: 6px;
+}
+
+.giorni-sede button {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--superficie);
+  font-weight: 700;
+}
+
+.giorni-sede button[aria-pressed="true"] {
+  background: var(--persona-2);
+  border-color: var(--persona-2);
+  color: var(--superficie);
+}
+
+.giorni-sede button:disabled {
+  opacity: 1;
+}
+
+.sede .azioni {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.sede .esito {
+  margin: 8px 0 0;
+  font-weight: 700;
+}
+
+.registro {
+  margin-top: 20px;
+  border-top: 1px solid var(--linea);
+  padding-top: 12px;
+}
+
+.registro h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.registro ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.9rem;
+}
+
+.registro li.scartata {
+  color: var(--tenue);
+}
+
+.registro .motivo {
+  color: var(--tenue);
 }
 
 .modulo-scambio {

@@ -8,10 +8,11 @@ Un'app per una casa condivisa: faccende, settimana, spesa e fotovoltaico, con il
   - sposta dopo il tramonto del sabato tutto quello che scadrebbe durante il sabato;
   - attiva e disattiva le faccende stagionali, guardando il tramonto del venerdì;
   - rimette nei mesi giusti le faccende dei mesi pari e dispari e quelle trimestrali;
-  - quando chi lavora in sede cambia giorno, sposta le sue faccende al giorno in cui resta a casa;
+  - tiene i giorni in sede di ogni settimana: chi lavora in sede li sceglie in Casa, le faccende legate alla sede (campo `sede`) li seguono, e le sue faccende che cadono mentre è fuori casa passano al giorno che torna da remoto;
   - legge da Home Assistant la produzione del fotovoltaico e suggerisce quando far partire le macchine;
   - riporta al giorno dopo le faccende non fatte, una volta sola: una faccenda fatta in ritardo non ricompare subito, e tra faccende con lo stesso `concetto` rimaste indietro se ne vede una;
-  - tiene una lista per persona in Home Assistant: ci mette le faccende di oggi e quelle rimaste indietro, e quando una voce viene spuntata la segna fatta in Donetick a nome di chi l'ha spuntata.
+  - tiene una lista per persona in Home Assistant: ci mette le faccende di oggi e quelle rimaste indietro, e quando una voce viene spuntata la segna fatta in Donetick a nome di chi l'ha spuntata. Una faccenda personale spuntata da un'altra persona torna da fare;
+  - dopo un cambio dei giorni in sede chiede a un assistente (un workflow n8n con un LLM) qualche spostamento per riequilibrare il carico, e applica solo le proposte che rispettano le regole.
 
 Donetick e Grocy restano originali, aggiornati dalle loro immagini Docker: non sono fork.
 
@@ -24,6 +25,7 @@ Donetick e Grocy restano originali, aggiornati dalle loro immagini Docker: non s
 | `confronto-backend.md` | Perché Donetick e Grocy |
 | `docker-compose.yml` | Donetick, Grocy e Casa, senza porte pubblicate: si raggiungono dal reverse proxy |
 | `compose.porte.yaml` | Solo per prove in locale: apre le porte su 127.0.0.1 |
+| `n8n/` | Il workflow dell'assistente da importare in n8n, con le istruzioni |
 | `casa/src` | Il servizio Casa (Node 24, TypeScript eseguito direttamente) |
 | `casa/web` | L'interfaccia (React e Vite), installabile sul telefono come app |
 | `casa/test` | Test del calendario, dei tramonti e del sabato, sul catalogo di esempio |
@@ -108,6 +110,16 @@ Casa legge lo stato delle entità e, se configurate, aggiorna le liste delle fac
 **Liste per persona.** In Home Assistant si crea una "Lista di cose da fare locale" per persona, per esempio "Faccende Anna", e la si indica in `HA_TODO_<NOME>`. Ogni due minuti Casa ci mette le faccende di oggi e quelle rimaste indietro, toglie quelle fatte altrove e segna fatte in Donetick quelle spuntate in Home Assistant. Le voci aggiunte a mano nella lista non vengono toccate. In una dashboard si può dare a ciascuno una vista con la propria lista, visibile solo a quell'utente.
 
 **Notifiche su iPhone.** La PWA su iOS non riceve notifiche push. Le notifiche arrivano da Donetick, che può mandarle su Telegram o Pushover, oppure tramite l'integrazione Donetick di Home Assistant e l'app Home Assistant sul telefono.
+
+## Giorni in sede e assistente
+
+Chi ha `sede` in `meta.orari` sceglie in Casa, nella settimana, i propri giorni in sede. Al salvataggio Casa:
+
+1. porta le voci con `sede: dentro` nei nuovi giorni in sede e quelle con `sede: fuori` negli altri;
+2. sposta le sue faccende, e quelle da fare insieme, che cadono nella fascia `fuori_casa_in_sede` di un nuovo giorno in sede al giorno che torna da remoto, alla stessa ora;
+3. se `CASA_N8N_WEBHOOK_URL` è impostato, manda a n8n la settimana con i carichi e i vincoli. Il workflow in `n8n/` chiede all'LLM al massimo 5 proposte e le rimanda a `POST /api/automazioni/proposte`, autenticata con `CASA_N8N_TOKEN`.
+
+Casa controlla ogni proposta (sabato, ore fuori casa, impegni, faccende da fare insieme) prima di applicarla. Un cambio di persona vale per una volta: finita l'occorrenza, la faccenda torna a chi l'aveva prima. Le modifiche applicate e scartate si vedono nella settimana.
 
 ## Cambiare le faccende
 

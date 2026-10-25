@@ -1,0 +1,163 @@
+{
+  "id": "mMfBLVd5wSXSsq60",
+  "name": "Casa: ribilancia le faccende",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Rome"
+  },
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "Evento da Casa",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "casa-ribilancia",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "casa-token",
+          "name": "Casa token"
+        }
+      },
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "casa-ribilancia",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "a2",
+      "name": "Prepara la richiesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Prepara la richiesta all'LLM con l'evento ricevuto da Casa\nconst evento = $input.first().json.body;\nconst sistema = \"Sei l'assistente di una casa condivisa. Ricevi le faccende ancora da fare questa settimana, chi le fa, i minuti di lavoro di ciascuno e i vincoli. Dopo un cambio dei giorni in sede, proponi AL MASSIMO 5 modifiche semplici per riequilibrare il carico: spostare una faccenda a un altro momento della stessa settimana (campo quando, ISO 8601 con fuso orario) oppure passarla per questa volta all'altra persona (campo chi). Rispetta sempre le regole ricevute: niente durante il sabato, niente a chi è fuori casa o ha un impegno, non cambiare persona alle faccende 'insieme' e non toccare quelle legate alla sede. Se il carico è già equilibrato, rispondi con un elenco vuoto. Scrivi il motivo di ogni proposta in italiano, in una frase.\";\nconst schema = {\n  \"type\": \"object\",\n  \"properties\": {\n    \"proposte\": {\n      \"type\": \"array\",\n      \"maxItems\": 5,\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"choreId\": {\n            \"type\": \"integer\"\n          },\n          \"chi\": {\n            \"type\": \"string\"\n          },\n          \"quando\": {\n            \"type\": \"string\"\n          },\n          \"motivo\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"choreId\",\n          \"motivo\"\n        ],\n        \"additionalProperties\": false\n      }\n    }\n  },\n  \"required\": [\n    \"proposte\"\n  ],\n  \"additionalProperties\": false\n};\nreturn [{\n  json: {\n    model: 'qwen3.5:4b',\n    temperature: 0.2,\n    reasoning_effort: 'low',\n    messages: [\n      { role: 'system', content: sistema },\n      { role: 'user', content: JSON.stringify(evento) },\n    ],\n    response_format: { type: 'json_schema', json_schema: { name: 'proposte', schema } },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Chiedi all'LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "asr-chiave",
+          "name": "ASR"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "https://asr.sf-paris.dev/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Estrai le proposte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// La risposta dell'LLM è un JSON in choices[0].message.content: se non si legge, nessuna proposta\nconst risposta = $input.first().json;\nlet proposte = [];\ntry {\n  proposte = JSON.parse(risposta.choices?.[0]?.message?.content ?? '{}').proposte ?? [];\n} catch (e) {\n  proposte = [];\n}\nconst evento = $('Evento da Casa').first().json.body;\nreturn [{ json: { settimana: evento.settimana, proposte } }];\n"
+      }
+    },
+    {
+      "id": "a5",
+      "name": "Manda a Casa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "casa-token",
+          "name": "Casa token"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "http://timedivision-casa:8080/api/automazioni/proposte",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Evento da Casa": {
+      "main": [
+        [
+          {
+            "node": "Prepara la richiesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara la richiesta": {
+      "main": [
+        [
+          {
+            "node": "Chiedi all'LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chiedi all'LLM": {
+      "main": [
+        [
+          {
+            "node": "Estrai le proposte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estrai le proposte": {
+      "main": [
+        [
+          {
+            "node": "Manda a Casa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

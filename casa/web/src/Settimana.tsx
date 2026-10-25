@@ -8,7 +8,6 @@ export function Settimana({ io, persone, onErrore }: Props) {
   const [da, setDa] = useState<string | undefined>(undefined);
   const [dati, setDati] = useState<DatiSettimana | null>(null);
   const [filtro, setFiltro] = useState<string>("tutti");
-  const [scambio, setScambio] = useState(false);
 
   const carica = useCallback(() => {
     api.settimana(da).then(setDati).catch(onErrore);
@@ -57,24 +56,13 @@ export function Settimana({ io, persone, onErrore }: Props) {
       </div>
 
       {dati.personaConSede && (
-        <div className="scambio">
-          {scambio ? (
-            <ScambioSede
-              persona={dati.personaConSede}
-              giorni={dati.giorni.map((g) => g.data)}
-              onFatto={() => {
-                setScambio(false);
-                carica();
-              }}
-              onAnnulla={() => setScambio(false)}
-              onErrore={onErrore}
-            />
-          ) : (
-            <button className="testo" onClick={() => setScambio(true)}>
-              {dati.personaConSede === io ? "Cambia un tuo giorno in sede" : `Cambia un giorno in sede di ${dati.personaConSede}`}
-            </button>
-          )}
-        </div>
+        <GiorniInSede
+          persona={dati.personaConSede}
+          settimana={dati.da}
+          sede={dati.sede}
+          onSalvato={carica}
+          onErrore={onErrore}
+        />
       )}
 
       <ol className="giorni">
@@ -99,7 +87,7 @@ export function Settimana({ io, persone, onErrore }: Props) {
                       <span className="nome">
                         {v.nome}
                         {v.spostataDalSabato && <em> dopo il tramonto</em>}
-                        {v.scambiata && <em> spostata per il cambio di giorno</em>}
+                        {v.spostataPerSede && <em> spostata per il cambio dei giorni in sede</em>}
                       </span>
                       <span className="minuti">{v.minuti ? durata(v.minuti) : ""}</span>
                     </li>
@@ -110,31 +98,57 @@ export function Settimana({ io, persone, onErrore }: Props) {
           );
         })}
       </ol>
+
+      {dati.registro.length > 0 && (
+        <section className="registro">
+          <h3>Modifiche dell'assistente</h3>
+          <ul>
+            {dati.registro.map((r, i) => (
+              <li key={i} className={r.applicata ? undefined : "scartata"}>
+                <span className="nome">{r.nome || "Faccenda"}</span>: {r.azione}
+                {r.motivo && <span className="motivo"> ({r.motivo})</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
 }
 
-type ScambioProps = {
+const FERIALI = ["lun", "mar", "mer", "gio", "ven"];
+const NOMI: Record<string, string> = { lun: "Lun", mar: "Mar", mer: "Mer", gio: "Gio", ven: "Ven" };
+
+type SedeProps = {
   persona: string;
-  giorni: string[];
-  onFatto: () => void;
-  onAnnulla: () => void;
+  settimana: string;
+  sede: DatiSettimana["sede"];
+  onSalvato: () => void;
   onErrore: (e: unknown) => void;
 };
 
-function ScambioSede({ persona, giorni, onFatto, onAnnulla, onErrore }: ScambioProps) {
-  const feriali = giorni.slice(1, 6);
-  const [inSede, setInSede] = useState(feriali[3]);
-  const [daRemoto, setDaRemoto] = useState(feriali[2]);
+function GiorniInSede({ persona, settimana, sede, onSalvato, onErrore }: SedeProps) {
+  const [scelti, setScelti] = useState<string[]>(sede.giorni);
   const [invio, setInvio] = useState(false);
   const [esito, setEsito] = useState<string | null>(null);
+  useEffect(() => {
+    setScelti(sede.giorni);
+    setEsito(null);
+  }, [settimana, sede.giorni.join()]);
 
-  const conferma = async () => {
+  const quanti = sede.predefiniti.length;
+  const cambiati = scelti.slice().sort().join() !== sede.giorni.slice().sort().join();
+  const diversiDalSolito = sede.giorni.slice().sort().join() !== sede.predefiniti.slice().sort().join();
+  const scegli = (g: string) =>
+    setScelti((s) => (s.includes(g) ? s.filter((x) => x !== g) : s.length < quanti ? [...s, g] : [...s.slice(1), g]));
+
+  const salva = async () => {
     setInvio(true);
     try {
-      const r = await api.scambio(inSede, daRemoto);
-      setEsito(r.esiti.length === 1 ? "Spostata 1 faccenda." : `Spostate ${r.esiti.length} faccende.`);
-      setTimeout(onFatto, 1200);
+      const r = await api.salvaSede(settimana, scelti);
+      const spostate = r.esiti.length;
+      setEsito(`${spostate === 1 ? "Spostata 1 faccenda" : `Spostate ${spostate} faccende`}.${r.avviso ? ` ${r.avviso}` : ""}`);
+      onSalvato();
     } catch (e) {
       onErrore(e);
     } finally {
@@ -143,46 +157,29 @@ function ScambioSede({ persona, giorni, onFatto, onAnnulla, onErrore }: ScambioP
   };
 
   return (
-    <form
-      className="modulo-scambio"
-      onSubmit={(e) => {
-        e.preventDefault();
-        conferma();
-      }}
-    >
-      <label>
-        {persona} va in sede
-        <select value={inSede} onChange={(e) => setInSede(e.target.value)}>
-          {feriali.map((g) => (
-            <option key={g} value={g}>
-              {nomeGiorno(g)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        e resta a casa
-        <select value={daRemoto} onChange={(e) => setDaRemoto(e.target.value)}>
-          {feriali.map((g) => (
-            <option key={g} value={g}>
-              {nomeGiorno(g)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="spiega">Le faccende di {persona} del giorno in sede passano al giorno a casa, alla stessa ora.</p>
-      {esito ? (
-        <p className="esito">{esito}</p>
-      ) : (
-        <div className="azioni">
-          <button type="submit" className="primario" disabled={invio || inSede === daRemoto}>
-            Sposta le faccende
+    <section className="sede">
+      <h3>
+        Giorni in sede di {persona}
+        {diversiDalSolito && <span className="diversi">diversi dal solito</span>}
+      </h3>
+      <div className="giorni-sede" role="group" aria-label={`Giorni in sede di ${persona}`}>
+        {FERIALI.map((g) => (
+          <button key={g} aria-pressed={scelti.includes(g)} disabled={!sede.modificabile || invio} onClick={() => scegli(g)}>
+            {NOMI[g]}
           </button>
-          <button type="button" className="testo" onClick={onAnnulla}>
+        ))}
+      </div>
+      {sede.modificabile && cambiati && (
+        <div className="azioni">
+          <button className="primario" disabled={invio || scelti.length !== quanti} onClick={salva}>
+            Salva i giorni in sede
+          </button>
+          <button className="testo" onClick={() => setScelti(sede.giorni)}>
             Annulla
           </button>
         </div>
       )}
-    </form>
+      {esito && <p className="esito">{esito}</p>}
+    </section>
   );
 }

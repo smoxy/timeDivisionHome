@@ -48,7 +48,15 @@ export function settimanaAB(g: Giorno, settimanaA: Giorno): "A" | "B" {
 export function cadeIl(voce: Voce, g: Giorno, cat: Catalogo): boolean {
   if (voce.scadenza) return confronta(voce.scadenza, g) === 0;
   if (voce.ogni === "evento" || voce.ogni === "una tantum") return false;
-  if (voce.giorni.length > 0 && !voce.giorni.includes(sigla(g))) return false;
+  if (voce.giorni.length > 0 && !voce.giorni.includes(sigla(g))) {
+    // "dentro" segue i giorni in sede anche quando cambiano: i giorni scritti sono solo quelli predefiniti
+    if (voce.sede !== "dentro") return false;
+  }
+  if (voce.sede) {
+    const inSede = cat.sedeDellaSettimana(domenicaDi(g)).includes(sigla(g));
+    if ((voce.sede === "dentro") !== inSede) return false;
+    if (voce.sede === "dentro" && voce.ogni === "settimana") return true;
+  }
   switch (voce.ogni) {
     case "settimana":
       return voce.giorni.length > 0;

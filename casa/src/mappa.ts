@@ -60,12 +60,13 @@ export function inDonetick(
   const nome = persona ? `${voce.nome} · ${persona}` : voce.nome;
 
   const chi = persona ?? voce.chi;
-  const assegnatari = chi === "insieme" ? cat.persone : [chi];
-  const assignees = assegnatari.map((p) => {
+  const idDi = (p: string) => {
     const id = idUtenti.get(p.toLowerCase());
     if (id === undefined) throw new Error(`Nessun utente Donetick per "${p}"`);
-    return { userId: id };
-  });
+    return id;
+  };
+  // Tutti tra gli assegnatari possibili, così una singola occorrenza può passare all'altra persona
+  const assignees = cat.persone.map((p) => ({ userId: idDi(p) }));
 
   const prima = prossima(voce, adesso, cat, true);
   const nextDueDate = prima?.quando.toISOString();
@@ -124,7 +125,7 @@ export function inDonetick(
     nextDueDate: voce.ogni === "evento" ? undefined : nextDueDate,
     isRolling: false,
     assignees,
-    assignedTo: chi === "insieme" ? undefined : assignees[0].userId,
+    assignedTo: chi === "insieme" ? undefined : idDi(chi),
     assignStrategy: chi === "insieme" ? "no_assignee" : "keep_last_assigned",
     isActive: attivaIl(voce, giornoDi(adesso), cat),
     notification: true,

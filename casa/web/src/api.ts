@@ -40,7 +40,7 @@ export type VoceSettimana = {
   area: string;
   sole: boolean;
   spostataDalSabato: boolean;
-  scambiata: boolean;
+  spostataPerSede: boolean;
 };
 
 export type Settimana = {
@@ -49,9 +49,11 @@ export type Settimana = {
   giorni: { data: string; sigla: string; tramonto?: string; voci: VoceSettimana[] }[];
   minuti: Record<string, number>;
   personaConSede?: string;
+  sede: { giorni: string[]; predefiniti: string[]; modificabile: boolean };
+  registro: { quando: string; nome: string; azione: string; motivo: string; applicata: boolean }[];
 };
 
-export type VoceSpesa = { id: number; nome: string; quantita: number; presa: boolean };
+export type VoceSpesa = { id: string; nome: string; quantita: number; presa: boolean };
 
 export class NonAutorizzato extends Error {}
 
@@ -77,10 +79,10 @@ export const api = {
   fatta: (id: number) => chiama<unknown>("POST", `/api/faccende/${id}/fatta`),
   salta: (id: number) => chiama<unknown>("POST", `/api/faccende/${id}/salta`),
   settimana: (da?: string) => chiama<Settimana>("GET", `/api/settimana${da ? `?da=${da}` : ""}`),
-  scambio: (inSede: string, daRemoto: string) =>
-    chiama<{ esiti: { faccenda: string; azione: string }[] }>("POST", "/api/sede/scambio", { inSede, daRemoto }),
+  salvaSede: (settimana: string, giorni: string[]) =>
+    chiama<{ giorni: string[]; esiti: { faccenda: string; azione: string }[]; avviso?: string }>("PUT", "/api/sede", { settimana, giorni }),
   spesa: () => chiama<{ voci: VoceSpesa[] }>("GET", "/api/spesa"),
   aggiungi: (nome: string, quantita?: number) => chiama<unknown>("POST", "/api/spesa", { nome, quantita }),
-  segna: (id: number, presa: boolean) => chiama<unknown>("PUT", `/api/spesa/${id}`, { presa }),
+  segna: (id: string, presa: boolean) => chiama<unknown>("PUT", `/api/spesa/${id}`, { presa }),
   togliPrese: () => chiama<{ tolte: number }>("DELETE", "/api/spesa/prese"),
 };

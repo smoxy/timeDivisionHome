@@ -3,9 +3,14 @@
 import { leggiCatalogo, type Catalogo } from "./catalogo.ts";
 import { config } from "./config.ts";
 import { Donetick, type Membro } from "./donetick.ts";
+import { leggiStato } from "./stato.ts";
+import { isoGiorno } from "./tempo.ts";
 
 export function catalogo(): Catalogo {
-  return leggiCatalogo(config.catalogo);
+  const cat = leggiCatalogo(config.catalogo);
+  const sede = leggiStato(config.stato).sede;
+  cat.sedeDellaSettimana = (domenica) => sede[isoGiorno(domenica)] ?? cat.sedePredefinita;
+  return cat;
 }
 
 export function donetickDi(persona: string): Donetick {

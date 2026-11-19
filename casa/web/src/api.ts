@@ -9,6 +9,8 @@ export type Sole = {
   piccoOggi?: string;
   piccoDomani?: string;
   fascia: { da: string; a: string };
+  oraLimiteMacchine?: string | null;
+  motivoOraLimite?: string;
   errore?: string;
 };
 

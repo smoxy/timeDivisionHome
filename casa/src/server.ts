@@ -10,11 +10,12 @@ import type { Catalogo } from "./catalogo.ts";
 import { config } from "./config.ts";
 import { type DonetickChore, leggiMarcatore, type Membro } from "./donetick.ts";
 import { leggiSole } from "./fotovoltaico.ts";
+import { istanteOraLimite, leggiOraLimite } from "./oralimite.ts";
 import { listaSpesa } from "./spesa.ts";
 import { applicaSede, type Esito, eseguiLavori } from "./lavori.ts";
 import { inviaPromemoria } from "./promemoria.ts";
 import { caricoPerGiorno, settimanaDi } from "./settimana.ts";
-import { applicaProposte, inviaEvento, type Proposta, tokenValido } from "./automazioni.ts";
+import { applicaProposte, inviaEvento, type Proposta, tokenHaValido, tokenValido } from "./automazioni.ts";
 import { homeAssistant, sincronizzaListe } from "./homeassistant.ts";
 import { catalogo, donetickAdmin, donetickDi, utenteDi } from "./servizi.ts";
 import { alba, sabatoCorrenteOProssimo, tramonto } from "./sole.ts";
@@ -89,6 +90,21 @@ app.post("/api/automazioni/proposte", async (c) => {
   return c.json({ esiti });
 });
 
+// Ora limite delle macchine ad alto consumo per Home Assistant (sensore REST): token dedicato, non la sessione
+app.get("/api/ha/macchine", async (c) => {
+  if (!tokenHaValido(c.req.header("x-casa-token"))) return c.json({ errore: "Token non valido" }, 401);
+  const cat = catalogo();
+  const adesso = new Date();
+  const r = await leggiOraLimite(adesso, cat.macchine?.sogliaKW);
+  return c.json({
+    oraLimite: r.oraLimite,
+    istante: r.oraLimite ? istanteOraLimite(r.oraLimite, adesso).toISOString() : null,
+    motivo: r.motivo,
+    rapporto: r.rapporto ?? null,
+    entroRiserva: cat.macchine?.entro ?? null,
+  });
+});
+
 app.post("/api/esci", (c) => {
   deleteCookie(c, COOKIE, { path: "/" });
   return c.json({ ok: true });
@@ -136,7 +152,7 @@ app.get("/api/oggi", async (c) => {
   const fineGiornata = istanteLocale(sommaGiorni(giornoDi(adesso), 1));
   const { client } = await donetickAdmin(cat);
   const elenco = await membri(cat);
-  const [tutte, sole] = await Promise.all([client.faccende(false), leggiSole(adesso)]);
+  const [tutte, sole] = await Promise.all([client.faccende(false), leggiSole(adesso, cat)]);
   const faccende = tutte
     .filter((f) => f.isActive && f.nextDueDate && new Date(f.nextDueDate) < fineGiornata)
     .map((f) => perLaUi(f, cat, elenco, adesso))
@@ -264,7 +280,7 @@ app.put("/api/spesa/:id", async (c) => {
 
 app.delete("/api/spesa/prese", async (c) => c.json({ tolte: await listaSpesa().togliPrese() }));
 
-app.get("/api/sole", async (c) => c.json(await leggiSole()));
+app.get("/api/sole", async (c) => c.json(await leggiSole(new Date(), catalogo())));
 
 // --- Interfaccia ------------------------------------------------------------
 

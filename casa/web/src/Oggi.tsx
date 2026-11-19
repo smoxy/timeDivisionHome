@@ -113,6 +113,19 @@ function Avvisi({ dati }: { dati: DatiOggi }) {
       {extra.length > 0 ? `, ${extra.join(", ")}` : ""}.
     </p>,
   );
+  if (sole.oraLimiteMacchine) {
+    righe.push(
+      <p className="avviso sole" key="macchine">
+        Macchine ad alto consumo entro le {sole.oraLimiteMacchine}.
+      </p>,
+    );
+  } else if (sole.motivoOraLimite === "poco sole") {
+    righe.push(
+      <p className="avviso sole" key="macchine">
+        Oggi il sole non basta per le macchine ad alto consumo.
+      </p>,
+    );
+  }
   return <div className="avvisi">{righe}</div>;
 }
 

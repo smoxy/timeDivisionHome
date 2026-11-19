@@ -30,9 +30,12 @@ meta:
   settimana_A_inizia: 2026-10-25
   # La domenica le scadenze slittano di 2 ore (non gli appuntamenti come la palestra)
   margine_domenica_minuti: 120
-  # Macchine ad alto consumo: finite entro le 15:30, quando la produzione fotovoltaica cala (fino al 31 marzo)
+  # Macchine ad alto consumo: finite entro le 15:30, quando la produzione fotovoltaica cala (fino al 31 marzo).
+  # Con Home Assistant l'ora limite si ricava ogni giorno dalla previsione: la fine dell'ultima ora in cui
+  # si prevedono almeno soglia_kw kW (predefinito 1.5); entro resta come riserva se la previsione manca
   macchine:
     entro: "15:30"
+    soglia_kw: 1.5
     fino_a: 2027-03-31
     durata_minuti: {lavatrice: 120, asciugatrice: 120, lavastoviglie: 150, forno: 90}
   orari:

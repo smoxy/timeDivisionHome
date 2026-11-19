@@ -1,7 +1,10 @@
 // Fotovoltaico: legge da Home Assistant produzione, batteria e picco previsto,
 // e suggerisce la fascia in cui far partire le macchine.
 
+import type { Catalogo } from "./catalogo.ts";
 import { config } from "./config.ts";
+import { numero, type Stato, statoEntita as stato } from "./homeassistant.ts";
+import { leggiOraLimite } from "./oralimite.ts";
 import { giornoDi, istanteLocale, oraLocale } from "./tempo.ts";
 
 export type Sole = {
@@ -15,6 +18,8 @@ export type Sole = {
   piccoOggi?: string;
   piccoDomani?: string;
   fascia: { da: string; a: string };
+  oraLimiteMacchine?: string | null; // entro quando finiscono le macchine ad alto consumo oggi (null: non si sa o sole scarso)
+  motivoOraLimite?: string; // "previsione", "poco sole" o "senza previsione"
   errore?: string;
 };
 
@@ -23,26 +28,6 @@ export function fasciaDiStagione(mese: number): { da: string; a: string } {
   if ([11, 12, 1, 2].includes(mese)) return { da: "10:30", a: "14:30" };
   if ([5, 6, 7, 8].includes(mese)) return { da: "09:00", a: "17:00" };
   return { da: "10:00", a: "16:00" };
-}
-
-type Stato = { valore: string; unita?: string };
-
-async function stato(entita: string | undefined): Promise<Stato | undefined> {
-  const { url, token } = config.ha;
-  if (!url || !token || !entita) return undefined;
-  const r = await fetch(`${url.replace(/\/$/, "")}/api/states/${entita}`, {
-    headers: { authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!r.ok) throw new Error(`Home Assistant ${entita}: ${r.status}`);
-  const dati = await r.json();
-  const valore = dati.state as string;
-  return valore === "unknown" || valore === "unavailable" ? undefined : { valore, unita: dati.attributes?.unit_of_measurement };
-}
-
-function numero(s: Stato | undefined): number | undefined {
-  const n = Number(s?.valore);
-  return s === undefined || Number.isNaN(n) ? undefined : n;
 }
 
 // Le integrazioni del fotovoltaico danno la potenza in W o in kW
@@ -58,17 +43,18 @@ function ora(s: Stato | undefined): string | undefined {
   return Number.isNaN(t.getTime()) ? undefined : oraLocale(t);
 }
 
-export async function leggiSole(adesso = new Date()): Promise<Sole> {
+export async function leggiSole(adesso = new Date(), cat?: Catalogo): Promise<Sole> {
   const stagione = fasciaDiStagione(giornoDi(adesso).mese);
   if (!config.ha.url || !config.ha.token) return { fonte: "stagione", fascia: stagione };
   try {
-    const [potenza, batteria, piccoOggi, piccoDomani, carico, rete] = await Promise.all([
+    const [potenza, batteria, piccoOggi, piccoDomani, carico, rete, limite] = await Promise.all([
       stato(config.ha.potenza),
       stato(config.ha.batteria),
       stato(config.ha.piccoOggi),
       stato(config.ha.piccoDomani),
       stato(config.ha.carico),
       stato(config.ha.rete),
+      leggiOraLimite(adesso, cat?.macchine?.sogliaKW),
     ]);
     const picco = ora(piccoOggi);
     let fascia = stagione;
@@ -96,6 +82,8 @@ export async function leggiSole(adesso = new Date()): Promise<Sole> {
       piccoOggi: picco,
       piccoDomani: ora(piccoDomani),
       fascia,
+      oraLimiteMacchine: limite.oraLimite,
+      motivoOraLimite: limite.motivo,
     };
   } catch (e) {
     return { fonte: "stagione", fascia: stagione, errore: (e as Error).message };

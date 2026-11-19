@@ -7,7 +7,9 @@ RUN npm run build
 
 FROM node:24-alpine
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production TZ=Europe/Rome
+# Dati dei fusi orari: senza, Alpine ignora TZ e l'orologio di sistema resta in UTC
+RUN apk add --no-cache tzdata
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY src ./src

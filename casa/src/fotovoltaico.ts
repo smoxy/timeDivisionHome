@@ -7,6 +7,9 @@ import { giornoDi, istanteLocale, oraLocale } from "./tempo.ts";
 export type Sole = {
   fonte: "home-assistant" | "stagione";
   produzioneW?: number;
+  consumoW?: number;
+  reteW?: number; // positivo = prelievo dalla rete, negativo = immissione
+  surplusW?: number; // produzione meno consumo: quanto resta per le macchine
   batteriaPct?: number;
   batteriaUsabileKWh?: number; // sopra la riserva minima
   piccoOggi?: string;
@@ -59,11 +62,13 @@ export async function leggiSole(adesso = new Date()): Promise<Sole> {
   const stagione = fasciaDiStagione(giornoDi(adesso).mese);
   if (!config.ha.url || !config.ha.token) return { fonte: "stagione", fascia: stagione };
   try {
-    const [potenza, batteria, piccoOggi, piccoDomani] = await Promise.all([
+    const [potenza, batteria, piccoOggi, piccoDomani, carico, rete] = await Promise.all([
       stato(config.ha.potenza),
       stato(config.ha.batteria),
       stato(config.ha.piccoOggi),
       stato(config.ha.piccoDomani),
+      stato(config.ha.carico),
+      stato(config.ha.rete),
     ]);
     const picco = ora(piccoOggi);
     let fascia = stagione;
@@ -76,10 +81,15 @@ export async function leggiSole(adesso = new Date()): Promise<Sole> {
       fascia = { da: da > stagione.da ? da : stagione.da, a: a < stagione.a ? a : stagione.a };
     }
     const pct = numero(batteria);
+    const produzioneW = watt(potenza);
+    const consumoW = watt(carico);
     const { batteriaKWh: capacita, batteriaRiservaPct: riserva } = config.ha;
     return {
       fonte: "home-assistant",
-      produzioneW: watt(potenza),
+      produzioneW,
+      consumoW,
+      reteW: watt(rete),
+      surplusW: produzioneW !== undefined && consumoW !== undefined ? produzioneW - consumoW : undefined,
       batteriaPct: pct,
       batteriaUsabileKWh:
         pct !== undefined && capacita > 0 ? Math.max(0, ((pct - riserva) / 100) * capacita) : undefined,

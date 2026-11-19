@@ -46,8 +46,14 @@ export function settimanaAB(g: Giorno, settimanaA: Giorno): "A" | "B" {
 
 // La regola della voce cade in questo giorno? (Senza stagioni né sabato.)
 export function cadeIl(voce: Voce, g: Giorno, cat: Catalogo): boolean {
+  if (cat.saltataIl(voce.id, g)) return false;
   if (voce.scadenza) return confronta(voce.scadenza, g) === 0;
   if (voce.ogni === "evento" || voce.ogni === "una tantum") return false;
+  // "vigilia" cade il giorno prima di ogni giorno in sede, anche a cavallo di due settimane
+  if (voce.sede === "vigilia") {
+    const domani = sommaGiorni(g, 1);
+    return voce.ogni === "settimana" && cat.sedeDellaSettimana(domenicaDi(domani)).includes(sigla(domani));
+  }
   if (voce.giorni.length > 0 && !voce.giorni.includes(sigla(g))) {
     // "dentro" segue i giorni in sede anche quando cambiano: i giorni scritti sono solo quelli predefiniti
     if (voce.sede !== "dentro") return false;
@@ -87,14 +93,26 @@ export function attivaIl(voce: Voce, g: Giorno, cat: Catalogo): boolean {
   return true;
 }
 
+// Le aree che sono appuntamenti a orario fisso: il margine della domenica non le sposta
+const SENZA_MARGINE = new Set(["palestra", "salute"]);
+
+export function margineDelGiorno(voce: Voce, g: Giorno, cat: Catalogo): number {
+  return sigla(g) === "dom" && !SENZA_MARGINE.has(voce.area) ? cat.margineDomenicaMinuti : 0;
+}
+
+// L'orario di una voce in un giorno: quello del catalogo, più l'eventuale margine della domenica
+export function orarioPrevisto(voce: Voce, g: Giorno, cat: Catalogo): Date {
+  const { ore, minuti } = orarioDi(voce);
+  return new Date(istanteLocale(g, ore, minuti).getTime() + margineDelGiorno(voce, g, cat) * 60_000);
+}
+
 function orarioDi(voce: Voce): { ore: number; minuti: number } {
   return voce.ora ? leggiOra(voce.ora) : { ore: 9, minuti: 0 };
 }
 
 export function occorrenzeDelGiorno(voce: Voce, g: Giorno, cat: Catalogo): Occorrenza[] {
   if (!voce.importa || !cadeIl(voce, g, cat) || !attivaIl(voce, g, cat)) return [];
-  const { ore, minuti } = orarioDi(voce);
-  const previsto = istanteLocale(g, ore, minuti);
+  const previsto = orarioPrevisto(voce, g, cat);
   const sabato = nelSabato(previsto, cat.luogo);
   const quando = sabato ? dopoIlSabato(sabato) : previsto;
   return destinatari(voce, cat).map((chi) => ({ voce, chi, previsto, quando, spostataDalSabato: sabato !== null }));
@@ -114,8 +132,7 @@ export function prossima(voce: Voce, dopo: Date, cat: Catalogo, ignoraStagione =
   for (let i = 0; i < 800; i++, g = sommaGiorni(g, 1)) {
     if (!voce.importa || !cadeIl(voce, g, cat)) continue;
     if (!ignoraStagione && !attivaIl(voce, g, cat)) continue;
-    const { ore, minuti } = orarioDi(voce);
-    const previsto = istanteLocale(g, ore, minuti);
+    const previsto = orarioPrevisto(voce, g, cat);
     if (previsto <= dopo) continue;
     const sabato = nelSabato(previsto, cat.luogo);
     const quando = sabato ? dopoIlSabato(sabato) : previsto;

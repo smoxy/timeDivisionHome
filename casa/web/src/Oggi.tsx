@@ -103,7 +103,9 @@ function Avvisi({ dati }: { dati: DatiOggi }) {
             : ""
         }`
       : null,
-    sole.produzioneW !== undefined ? `${(sole.produzioneW / 1000).toLocaleString("it-IT", { maximumFractionDigits: 1 })} kW adesso` : null,
+    sole.produzioneW !== undefined ? `${kW(sole.produzioneW)} dal sole adesso` : null,
+    sole.consumoW !== undefined ? `la casa usa ${kW(sole.consumoW)}` : null,
+    sole.surplusW !== undefined && sole.surplusW > 0 ? `${kW(sole.surplusW)} in più per le macchine` : null,
   ].filter(Boolean);
   righe.push(
     <p className="avviso sole" key="sole">
@@ -151,4 +153,8 @@ function Elenco({ voci, persone, fatte, inCorso, agisci, mostraGiorno }: ElencoP
       })}
     </ul>
   );
+}
+
+function kW(w: number): string {
+  return `${(w / 1000).toLocaleString("it-IT", { maximumFractionDigits: 1 })} kW`;
 }

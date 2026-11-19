@@ -2,7 +2,7 @@
 // Quello che Donetick non sa fare (mesi pari e dispari, stagioni, sabato) lo correggono i lavori periodici.
 
 import { attivaIl, prossima } from "./calendario.ts";
-import type { Catalogo, Voce } from "./catalogo.ts";
+import { type Catalogo, macchineOltre, type Voce } from "./catalogo.ts";
 import { marcatore } from "./donetick.ts";
 import { FUSO, giornoDi, type SiglaGiorno } from "./tempo.ts";
 
@@ -57,6 +57,7 @@ export function inDonetick(
   adesso: Date,
 ): { chore: Record<string, unknown>; avvisi: Avviso[] } {
   const avvisi: Avviso[] = [];
+  for (const m of macchineOltre(voce, giornoDi(adesso), cat)) avvisi.push({ id: voce.id, messaggio: `macchine oltre il limite: ${m}` });
   const nome = persona ? `${voce.nome} · ${persona}` : voce.nome;
 
   const chi = persona ?? voce.chi;

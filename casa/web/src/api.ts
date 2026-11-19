@@ -1,6 +1,9 @@
 export type Sole = {
   fonte: "home-assistant" | "stagione";
   produzioneW?: number;
+  consumoW?: number;
+  reteW?: number;
+  surplusW?: number;
   batteriaPct?: number;
   batteriaUsabileKWh?: number;
   piccoOggi?: string;

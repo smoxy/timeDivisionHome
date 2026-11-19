@@ -8,8 +8,9 @@ import { isoGiorno } from "./tempo.ts";
 
 export function catalogo(): Catalogo {
   const cat = leggiCatalogo(config.catalogo);
-  const sede = leggiStato(config.stato).sede;
+  const { sede, saltate } = leggiStato(config.stato);
   cat.sedeDellaSettimana = (domenica) => sede[isoGiorno(domenica)] ?? cat.sedePredefinita;
+  cat.saltataIl = (voceId, giorno) => saltate[voceId]?.includes(isoGiorno(giorno)) ?? false;
   return cat;
 }
 

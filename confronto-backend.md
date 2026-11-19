@@ -50,7 +50,7 @@ iPhone / iPad / PC
    servizio "Casa" (piccolo backend vostro)
    ├── Donetick      faccende, storico, punti
    ├── Grocy         scorte, scadenze, spesa, menù
-   └── Home Assistant  FusionSolar, previsione solare, notifiche sul telefono
+   └── Home Assistant  fotovoltaico in locale (Modbus TCP), previsione solare, notifiche sul telefono
 ```
 
 - **Donetick e Grocy restano originali**, aggiornati dalle loro immagini Docker. Nessun fork da tenere allineato.
@@ -59,7 +59,7 @@ iPhone / iPad / PC
   - **stagioni**: attiva e disattiva le faccende stagionali, per esempio il lavaggio dei pavimenti che a metà febbraio passa dalla domenica al venerdì;
   - **giorni in sede**: quando chi lavora in sede cambia giorno, ne scambia le faccende;
   - **mesi pari e dispari**: gestisce frigo, davanzali, cuscini e ciclo cura;
-  - **fotovoltaico**: legge da Home Assistant la produzione FusionSolar, la batteria e la previsione, e suggerisce l'orario delle macchine;
+  - **fotovoltaico**: legge da Home Assistant produzione, consumo, rete, batteria e previsione, e calcola ogni giorno fino a che ora far girare le macchine ad alto consumo;
   - **settimana tipo**: tiene gli orari di entrambi, letti da `faccende.yaml`.
 - **Notifiche su iPhone tramite l'app Home Assistant**, da installare sui telefoni: funziona meglio della PWA, che su iOS non riceve notifiche push.
 - **La UI nuova** è codice vostro dalla prima riga: la licenza la scegliete voi. Se riprendete pezzi della UI di Donetick, quella parte resta AGPL. Il repo pubblico va bene in entrambi i casi.
@@ -92,5 +92,5 @@ Restano fuori, per dopo:
 - Grocy: [repository](https://github.com/grocy/grocy), [release](https://github.com/grocy/grocy/releases), [Grocy Mobile per iOS](https://github.com/supergeorg/Grocy-SwiftUI), [integrazione Home Assistant](https://github.com/custom-components/grocy) e i problemi aperti [#363](https://github.com/custom-components/grocy/issues/363) e [#364](https://github.com/custom-components/grocy/issues/364).
 - Donetick: [backend](https://github.com/donetick/donetick), [frontend](https://github.com/donetick/frontend), [release](https://github.com/donetick/donetick/releases), [integrazione Home Assistant](https://github.com/donetick/donetick-hass-integration), la richiesta delle regole RRULE [#653](https://github.com/donetick/donetick/issues/653).
 - Vikunja: [repository](https://github.com/go-vikunja/vikunja), [PR RRULE #3071](https://github.com/go-vikunja/vikunja/pull/3071), [CalDAV](https://vikunja.io/docs/caldav/).
-- FusionSolar in Home Assistant: [tijsverkoyen/homeassistant-fusionsolar](https://github.com/tijsverkoyen/homeassistant-fusionsolar), [olibos/Home-Assistant-FusionSolar-OpenApi](https://github.com/olibos/Home-Assistant-FusionSolar-OpenApi/).
+- Fotovoltaico Huawei in locale: [wlcrs/huawei_solar](https://github.com/wlcrs/huawei_solar) (Modbus TCP, anche tramite EMMA). Via cloud, FusionSolar in Home Assistant: [tijsverkoyen/homeassistant-fusionsolar](https://github.com/tijsverkoyen/homeassistant-fusionsolar), [olibos/Home-Assistant-FusionSolar-OpenApi](https://github.com/olibos/Home-Assistant-FusionSolar-OpenApi/).
 - KitchenOwl: [app iOS](https://apps.apple.com/app/kitchenowl/id1557453670).

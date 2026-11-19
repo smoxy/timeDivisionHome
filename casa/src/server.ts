@@ -10,6 +10,7 @@ import type { Catalogo } from "./catalogo.ts";
 import { config } from "./config.ts";
 import { type DonetickChore, leggiMarcatore, type Membro } from "./donetick.ts";
 import { leggiSole } from "./fotovoltaico.ts";
+import { pubblicaOraLimite } from "./limiteha.ts";
 import { istanteOraLimite, leggiOraLimite } from "./oralimite.ts";
 import { listaSpesa } from "./spesa.ts";
 import { applicaSede, type Esito, eseguiLavori } from "./lavori.ts";
@@ -313,6 +314,11 @@ let lavoriInCorso = false;
 async function lavoriPeriodici() {
   if (lavoriInCorso) return;
   lavoriInCorso = true;
+  try {
+    await pubblicaOraLimite(homeAssistant(), catalogo().macchine?.sogliaKW);
+  } catch (e) {
+    console.error("[ora limite]", (e as Error).message);
+  }
   try {
     for (const e of await lavoriCompleti()) console.log(`[lavori] ${e.faccenda}: ${e.azione}`);
   } catch (e) {

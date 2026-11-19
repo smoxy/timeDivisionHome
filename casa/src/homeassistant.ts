@@ -90,6 +90,64 @@ export class HomeAssistant {
   }
 }
 
+export type Stato = { valore: string; unita?: string };
+
+// Stato di un'entità via REST con il token di Casa; undefined se non è impostata o non è disponibile
+export async function statoEntita(entita: string | undefined): Promise<Stato | undefined> {
+  const { url, token } = config.ha;
+  if (!url || !token || !entita) return undefined;
+  const r = await fetch(`${url.replace(/\/$/, "")}/api/states/${entita}`, {
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!r.ok) throw new Error(`Home Assistant ${entita}: ${r.status}`);
+  const dati = await r.json();
+  const valore = dati.state as string;
+  return valore === "unknown" || valore === "unavailable" ? undefined : { valore, unita: dati.attributes?.unit_of_measurement };
+}
+
+export function numero(s: Stato | undefined): number | undefined {
+  const n = Number(s?.valore);
+  return s === undefined || Number.isNaN(n) ? undefined : n;
+}
+
+// Un comando dell'API websocket di Home Assistant (ce ne sono che via REST non esistono, come energy/solar_forecast).
+// Si apre la connessione, ci si autentica, si manda il comando e si chiude.
+export function comandoWebSocket<T = unknown>(base: string, token: string, comando: Record<string, unknown>, attesaMs = 10_000): Promise<T> {
+  return new Promise<T>((risolvi, rifiuta) => {
+    const ws = new WebSocket(`${base.replace(/\/$/, "").replace(/^http/, "ws")}/api/websocket`);
+    let finito = false;
+    const fine = (errore: Error | null, risultato?: T) => {
+      if (finito) return;
+      finito = true;
+      clearTimeout(scadenza);
+      ws.close();
+      if (errore) rifiuta(errore);
+      else risolvi(risultato as T);
+    };
+    const scadenza = setTimeout(() => fine(new Error("Home Assistant websocket: nessuna risposta")), attesaMs);
+    ws.onerror = () => fine(new Error("Home Assistant websocket: connessione non riuscita"));
+    ws.onclose = () => fine(new Error("Home Assistant websocket: connessione chiusa"));
+    ws.onmessage = (e) => {
+      if (finito) return; // messaggi arrivati mentre la connessione si chiude
+      let m: any;
+      try {
+        m = JSON.parse(String(e.data));
+      } catch {
+        return fine(new Error("Home Assistant websocket: risposta non valida"));
+      }
+      if (m === null || typeof m !== "object") return fine(new Error("Home Assistant websocket: risposta non valida"));
+      if (m.type === "auth_required") ws.send(JSON.stringify({ type: "auth", access_token: token }));
+      else if (m.type === "auth_ok") ws.send(JSON.stringify({ id: 1, ...comando }));
+      else if (m.type === "auth_invalid") fine(new Error("Home Assistant websocket: token non valido"));
+      else if (m.type === "result" && m.id === 1) {
+        if (m.success) fine(null, m.result as T);
+        else fine(new Error(`Home Assistant ${String(comando.type)}: ${m.error?.message ?? "errore"}`));
+      }
+    };
+  });
+}
+
 export function homeAssistant(): HomeAssistant | null {
   return config.ha.url && config.ha.token ? new HomeAssistant(config.ha.url, config.ha.token) : null;
 }

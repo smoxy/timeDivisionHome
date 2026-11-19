@@ -9,6 +9,7 @@
 import type { Catalogo } from "./catalogo.ts";
 import { config } from "./config.ts";
 import { type Donetick, type DonetickChore, leggiMarcatore, type Membro } from "./donetick.ts";
+import { leggiOraLimite, type OraLimite } from "./oralimite.ts";
 import { settimanaDi } from "./settimana.ts";
 import { nelSabato } from "./sole.ts";
 import { leggiStato, scriviStato } from "./stato.ts";
@@ -105,6 +106,7 @@ export type DatiMessaggio = {
   adesso: Date;
   aperte: VoceAperta[]; // Donetick: ancora aperte, di qualunque giorno
   previsteDomani: VoceAperta[]; // dalla settimana di Casa, per domani
+  oraLimite?: OraLimite; // macchine ad alto consumo di oggi, se nota: nel messaggio del mattino
 };
 
 // Il testo di un promemoria, o null se non c'è niente da dire
@@ -124,6 +126,8 @@ export function costruisciMessaggio(d: DatiMessaggio, cat: Catalogo): string | n
     parti.push(`Buongiorno ${nome}! Oggi, ${GIORNO_LUNGO.format(d.adesso)}:`);
     parti.push(diOggi.length > 0 ? elenco(diOggi, cat, nome) : "Per oggi non c'è niente in programma.");
     if (diOggi.length > 0) parti.push(`In tutto circa ${durata(totale(diOggi))}.`);
+    if (d.oraLimite?.oraLimite) parti.push(`Macchine ad alto consumo entro le ${d.oraLimite.oraLimite}.`);
+    else if (d.oraLimite?.motivo === "poco sole") parti.push("Oggi il sole non basta per le macchine ad alto consumo.");
     parti.push(sezioneIndietro("Rimaste da prima:", arretrate, cat, nome, inizioOggi));
   } else if (d.slot === "sera") {
     const inRitardo = d.aperte.filter((v) => prima(v, d.adesso));
@@ -195,7 +199,8 @@ export async function preparaMessaggio(
   adesso: Date,
 ): Promise<string | null> {
   const aperte = await faccendeAperte(client, cat, membri, persona);
-  return costruisciMessaggio({ slot, persona, adesso, aperte, previsteDomani: slot === "domani" ? previsteDomani(cat, persona, adesso) : [] }, cat);
+  const oraLimite = slot === "mattina" && cat.macchine ? await leggiOraLimite(adesso, cat.macchine.sogliaKW) : undefined;
+  return costruisciMessaggio({ slot, persona, adesso, aperte, previsteDomani: slot === "domani" ? previsteDomani(cat, persona, adesso) : [], oraLimite }, cat);
 }
 
 // Chiamata a ogni giro dei lavori: manda i promemoria dovuti e ricorda cosa ha già gestito

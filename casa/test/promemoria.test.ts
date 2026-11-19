@@ -53,6 +53,19 @@ test("mattina: oggi in ordine, con le rimaste da prima a parte", () => {
   assert.ok(!testo.includes("domani"));
 });
 
+test("mattina: la riga sulle macchine ad alto consumo, se l'ora limite è nota", () => {
+  const base = { slot: "mattina" as const, persona: "Anna", adesso: giorno("2026-11-05", 9), aperte: [voce("bucato", giorno("2026-11-05", 10), 45)], previsteDomani: [] };
+  const con = costruisciMessaggio({ ...base, oraLimite: { oraLimite: "15:00", motivo: "previsione", rapporto: 1 } }, cat)!;
+  assert.match(con, /In tutto circa 45 min\.\n\nMacchine ad alto consumo entro le 15:00\.$/);
+  const poco = costruisciMessaggio({ ...base, oraLimite: { oraLimite: null, motivo: "poco sole", rapporto: 1 } }, cat)!;
+  assert.match(poco, /\nOggi il sole non basta per le macchine ad alto consumo\.$/);
+  const senza = costruisciMessaggio({ ...base, oraLimite: { oraLimite: null, motivo: "senza previsione" } }, cat)!;
+  assert.equal(senza, costruisciMessaggio(base, cat));
+  assert.ok(!senza.includes("Macchine"));
+  // gli altri messaggi non la hanno
+  assert.ok(!costruisciMessaggio({ ...base, slot: "sera", adesso: giorno("2026-11-05", 18), oraLimite: { oraLimite: "15:00", motivo: "previsione" } }, cat)!.includes("Macchine"));
+});
+
 test("mattina senza niente: nessun messaggio", () => {
   assert.equal(costruisciMessaggio({ slot: "mattina", persona: "Anna", adesso: giorno("2026-11-05", 9), aperte: [voce("x", giorno("2026-11-06", 8), 5)], previsteDomani: [] }, cat), null);
 });

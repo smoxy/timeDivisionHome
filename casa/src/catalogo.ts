@@ -57,8 +57,9 @@ export type Catalogo = {
   sedeDellaSettimana: (domenica: Giorno) => SiglaGiorno[];
   // Quel giorno la voce è stata saltata per tutti (da stato.json)
   saltataIl: (voceId: string, giorno: Giorno) => boolean;
-  // Macchine ad alto consumo (lavatrice, forno, ...) che devono aver finito entro un'ora, finché dura il vincolo
-  macchine: { entro: string; fino?: Giorno; durata: Record<string, number> } | null;
+  // Macchine ad alto consumo (lavatrice, forno, ...) che devono aver finito entro un'ora, finché dura il vincolo.
+  // entro è l'ora di riserva; ogni giorno l'ora limite si ricava dalla previsione: l'ultima ora con almeno sogliaKW kW.
+  macchine: { entro: string; fino?: Giorno; sogliaKW: number; durata: Record<string, number> } | null;
   faccende: Voce[];
 };
 
@@ -141,6 +142,7 @@ export function leggiCatalogo(percorso: string): Catalogo {
       ? {
           entro: String(meta.macchine.entro),
           fino: meta.macchine.fino_a === undefined ? undefined : comeGiorno(meta.macchine.fino_a),
+          sogliaKW: Number(meta.macchine.soglia_kw) > 0 ? Number(meta.macchine.soglia_kw) : 1.5,
           durata: Object.fromEntries(Object.entries(meta.macchine.durata_minuti ?? {}).map(([k, v]) => [k, Number(v)])),
         }
       : null,
@@ -168,7 +170,8 @@ function macchineDa(id: string, valore: unknown, regola: any): Record<string, st
 
 // Le macchine di una voce che, partendo alle ore previste (spostate di `spostamentoMinuti`), finirebbero
 // dopo il limite del fotovoltaico. Vuoto se il vincolo non c'è o è scaduto.
-export function macchineOltre(voce: Voce, g: Giorno, cat: Catalogo, spostamentoMinuti = 0): string[] {
+// `entro` sostituisce l'ora di riserva del catalogo, per esempio con l'ora limite di oggi.
+export function macchineOltre(voce: Voce, g: Giorno, cat: Catalogo, spostamentoMinuti = 0, entro?: string): string[] {
   const m = cat.macchine;
   if (!m || !voce.macchine || (m.fino && confronta(g, m.fino) > 0)) return [];
   const minuti = (t: string) => {
@@ -176,11 +179,12 @@ export function macchineOltre(voce: Voce, g: Giorno, cat: Catalogo, spostamentoM
     return ore * 60 + mm;
   };
   const come = (n: number) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+  const limite = entro ?? m.entro;
   const fuori: string[] = [];
   for (const [nome, ora] of Object.entries(voce.macchine)) {
     const inizio = minuti(ora) + spostamentoMinuti;
     const fine = inizio + (m.durata[nome] ?? 0);
-    if (fine > minuti(m.entro)) fuori.push(`${nome} da ${come(inizio)} finisce alle ${come(fine)}, dopo le ${m.entro}`);
+    if (fine > minuti(limite)) fuori.push(`${nome} da ${come(inizio)} finisce alle ${come(fine)}, dopo le ${limite}`);
   }
   return fuori;
 }

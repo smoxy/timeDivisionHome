@@ -110,6 +110,26 @@ Con Home Assistant servono:
 
 Casa legge lo stato delle entità e, se configurate, aggiorna le liste delle faccende.
 
+**Macchine e fotovoltaico.** Le macchine ad alto consumo (lavatrice, asciugatrice, lavastoviglie, forno, vedi `meta.macchine`) devono aver finito prima che la produzione cali. L'ora limite non è fissa: ogni giorno Casa chiede a Home Assistant la previsione di Forecast.Solar (`energy/solar_forecast`, via websocket) e la fissa alla fine dell'ultima ora in cui si prevedono almeno `soglia_kw` kW (1,5 se non indicata). La previsione è corretta con quanto il sole ha reso davvero stamattina, letto da `HA_PV_TODAY_ENTITY` (rapporto tra reale e previsto, tra 0,5 e 1,5, solo dopo che è passata almeno un'ora di sole). Se nessuna ora raggiunge la soglia, Casa scrive che oggi il sole non basta. Se la previsione manca vale l'ora di riserva `entro`. L'ora limite compare in Oggi, nel promemoria del mattino su Telegram e nel controllo delle proposte dell'assistente (per oggi). Si rilegge ogni 10 minuti.
+
+Home Assistant la legge da `GET /api/ha/macchine`, con l'header `x-casa-token` uguale a `CASA_HA_TOKEN` (senza token valido, 401), per esempio con un sensore REST:
+
+```yaml
+rest:
+  - resource: https://casa.example.com/api/ha/macchine
+    headers:
+      x-casa-token: !secret casa_ha_token
+    scan_interval: 600
+    sensor:
+      - name: "Macchine: ora limite"
+        value_template: "{{ value_json.istante }}"
+        device_class: timestamp
+      - name: "Macchine: motivo"
+        value_template: "{{ value_json.motivo }}"
+```
+
+La risposta è `{ oraLimite: "HH:MM" | null, istante: ISO | null, motivo, rapporto, entroRiserva }`; `istante` è `null` quando oggi il sole non basta o la previsione manca.
+
 **Liste per persona.** In Home Assistant si crea una "Lista di cose da fare locale" per persona, per esempio "Faccende Anna", e la si indica in `HA_TODO_<NOME>`. Ogni due minuti Casa ci mette le faccende di oggi e quelle rimaste indietro, toglie quelle fatte altrove e segna fatte in Donetick quelle spuntate in Home Assistant. Le voci aggiunte a mano nella lista non vengono toccate. In una dashboard si può dare a ciascuno una vista con la propria lista, visibile solo a quell'utente.
 
 **Notifiche su iPhone.** La PWA su iOS non riceve notifiche push. Le notifiche arrivano da Donetick, che può mandarle su Telegram o Pushover, oppure tramite l'integrazione Donetick di Home Assistant e l'app Home Assistant sul telefono.

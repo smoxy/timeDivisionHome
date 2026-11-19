@@ -32,6 +32,8 @@ export const config = {
     // Capacità della batteria e riserva minima, per calcolare l'energia davvero usabile
     batteriaKWh: Number(process.env.HA_BATTERY_CAPACITY_KWH ?? 0),
     batteriaRiservaPct: Number(process.env.HA_BATTERY_RESERVE_PCT ?? 0),
+    // Energia prodotta oggi (kWh), per correggere la previsione con quanto il sole ha reso finora
+    produzioneOggi: env("HA_PV_TODAY_ENTITY"),
     piccoOggi: env("HA_PEAK_TIME_TODAY_ENTITY"),
     piccoDomani: env("HA_PEAK_TIME_TOMORROW_ENTITY"),
     // Lista delle faccende di ciascuno: HA_TODO_ANNA=todo.faccende_anna, ...
@@ -47,6 +49,8 @@ export const config = {
   // Assistente: webhook di n8n chiamato quando cambiano i giorni in sede, e token condiviso
   n8nWebhook: env("CASA_N8N_WEBHOOK_URL"),
   n8nToken: env("CASA_N8N_TOKEN"),
+  // Token con cui Home Assistant legge l'ora limite delle macchine (GET /api/ha/macchine)
+  tokenPerHa: env("CASA_HA_TOKEN"),
   // Ogni quanto girano i lavori periodici (sabato, stagioni, mesi, ritardi, liste di Home Assistant)
   intervalloLavoriMs: Number(process.env.CASA_JOBS_INTERVAL_MS ?? 2 * 60_000),
 };

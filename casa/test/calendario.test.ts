@@ -186,4 +186,9 @@ test("macchine ad alto consumo entro il limite del fotovoltaico", async () => {
   assert.equal(macchineOltre(bucato, g, cat, 150).length, 1); // spostata di 2 h 30: l'asciugatrice finisce alle 16:00
   assert.deepEqual(macchineOltre(tardi, leggiGiorno("2027-04-01"), cat), []); // vincolo scaduto
   for (const v of cat.faccende) assert.deepEqual(macchineOltre(v, g, cat), [], v.id); // l'esempio rispetta la regola
+  assert.equal(cat.macchine?.sogliaKW, 1.5);
+  // Ora limite del giorno al posto di quella di riserva
+  assert.deepEqual(macchineOltre(bucato, g, cat, 0, "13:00"), ["asciugatrice da 11:30 finisce alle 13:30, dopo le 13:00"]);
+  assert.deepEqual(macchineOltre(tardi, g, cat, 0, "18:00"), []);
+  assert.deepEqual(macchineOltre(tardi, leggiGiorno("2027-04-01"), cat, 0, "10:00"), []); // vincolo scaduto anche con l'ora limite
 });

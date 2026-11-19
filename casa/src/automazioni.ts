@@ -7,6 +7,7 @@ import { type Catalogo, macchineOltre } from "./catalogo.ts";
 import { config } from "./config.ts";
 import { type Donetick, type DonetickChore, leggiMarcatore, type Membro } from "./donetick.ts";
 import { fuoriCasa } from "./lavori.ts";
+import { leggiOraLimite } from "./oralimite.ts";
 import { nelSabato } from "./sole.ts";
 import { leggiStato, scriviStato } from "./stato.ts";
 import {
@@ -29,12 +30,20 @@ export const MASSIMO_PROPOSTE = 5;
 
 export type Proposta = { choreId: number; chi?: string; quando?: string; motivo?: string };
 
-export function tokenValido(ricevuto: string | undefined): boolean {
-  const atteso = config.n8nToken;
+function uguali(atteso: string | undefined, ricevuto: string | undefined): boolean {
   if (!atteso || !ricevuto) return false;
   const a = Buffer.from(atteso);
   const b = Buffer.from(ricevuto);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export function tokenValido(ricevuto: string | undefined): boolean {
+  return uguali(config.n8nToken, ricevuto);
+}
+
+// Token con cui Home Assistant legge l'ora limite delle macchine
+export function tokenHaValido(ricevuto: string | undefined): boolean {
+  return uguali(config.tokenPerHa, ricevuto);
 }
 
 function personaDi(c: DonetickChore, cat: Catalogo, membri: Membro[]): string {
@@ -169,6 +178,7 @@ export async function applicaProposte(
   statoPercorso: string,
   adesso = new Date(),
   prova = false, // valuta e basta: niente spostamenti, niente registro
+  oraLimiteOggi: () => Promise<string | null> = async () => (await leggiOraLimite(adesso, cat.macchine?.sogliaKW)).oraLimite,
 ) {
   const stato = leggiStato(statoPercorso);
   const voci = new Map(cat.faccende.map((v) => [v.id, v]));
@@ -218,7 +228,10 @@ export async function applicaProposte(
       continue;
     }
     const spostamento = p.quando ? minutiDelGiorno(quando) - minutiDelGiorno(new Date(c.nextDueDate!)) : 0;
-    const macchine = voce ? macchineOltre(voce, giornoDi(quando), cat, spostamento)[0] : undefined;
+    // Per oggi vale l'ora limite della previsione, se nota; gli altri giorni l'ora di riserva
+    const perOggi = voce?.macchine && confronta(giornoDi(quando), giornoDi(adesso)) === 0;
+    const limite = perOggi ? ((await oraLimiteOggi()) ?? undefined) : undefined;
+    const macchine = voce ? macchineOltre(voce, giornoDi(quando), cat, spostamento, limite)[0] : undefined;
     if (macchine) {
       registra(false, `scartata: ${macchine}`, nome);
       continue;

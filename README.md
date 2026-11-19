@@ -105,7 +105,7 @@ Su iPhone e iPad si apre l'indirizzo in Safari e si sceglie "Aggiungi alla scher
 
 Con Home Assistant servono:
 - `HA_URL` e un token di lunga durata in `HA_TOKEN` (profilo utente, Sicurezza), meglio di un utente non amministratore;
-- le entità di potenza e batteria del vostro impianto, per esempio dall'integrazione FusionSolar;
+- le entità di potenza e batteria del vostro impianto: produzione, consumo della casa, scambio con la rete, SOC (`HA_PV_POWER_ENTITY`, `HA_LOAD_POWER_ENTITY`, `HA_GRID_POWER_ENTITY`, `HA_BATTERY_SOC_ENTITY`). Meglio se lette in locale: per un impianto Huawei con EMMA, l'integrazione Huawei Solar via Modbus TCP aggiorna le potenze ogni pochi secondi senza passare dal cloud. Noi usiamo un fork con gli intervalli configurabili, [smoxy/huawei_solar](https://github.com/smoxy/huawei_solar). Il cloud (FusionSolar) dà dati in ritardo di minuti;
 - le entità del picco previsto, dall'integrazione Forecast.Solar.
 
 Casa legge lo stato delle entità e, se configurate, aggiorna le liste delle faccende.

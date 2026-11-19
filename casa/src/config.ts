@@ -36,6 +36,9 @@ export const config = {
     produzioneOggi: env("HA_PV_TODAY_ENTITY"),
     piccoOggi: env("HA_PEAK_TIME_TODAY_ENTITY"),
     piccoDomani: env("HA_PEAK_TIME_TOMORROW_ENTITY"),
+    // Ora limite delle macchine di oggi, scritta da Casa: input_datetime (data e ora) e input_text (motivo)
+    oraLimite: env("HA_ORA_LIMITE_ENTITY"),
+    motivoOraLimite: env("HA_MOTIVO_ORA_LIMITE_ENTITY"),
     // Lista delle faccende di ciascuno: HA_TODO_ANNA=todo.faccende_anna, ...
     todo: (persona: string) => env(`HA_TODO_${persona.toUpperCase()}`),
     // Lista della spesa di Home Assistant: se c'è, Casa usa questa e non quella di Grocy

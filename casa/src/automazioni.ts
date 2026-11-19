@@ -3,13 +3,26 @@
 // prima di applicarle: l'LLM propone, Casa decide.
 
 import { timingSafeEqual } from "node:crypto";
-import type { Catalogo } from "./catalogo.ts";
+import { type Catalogo, macchineOltre } from "./catalogo.ts";
 import { config } from "./config.ts";
 import { type Donetick, type DonetickChore, leggiMarcatore, type Membro } from "./donetick.ts";
 import { fuoriCasa } from "./lavori.ts";
 import { nelSabato } from "./sole.ts";
 import { leggiStato, scriviStato } from "./stato.ts";
-import { confronta, domenicaDi, type Giorno, giornoDi, isoGiorno, istanteLocale, oraLocale, sigla, sommaGiorni } from "./tempo.ts";
+import {
+  confronta,
+  domenicaDi,
+  type Giorno,
+  giornoDi,
+  isoGiorno,
+  istanteLocale,
+  oraLocale,
+  parti,
+  SIGLE_GIORNI,
+  sigla,
+  type SiglaGiorno,
+  sommaGiorni,
+} from "./tempo.ts";
 import { utenteDi } from "./servizi.ts";
 
 export const MASSIMO_PROPOSTE = 5;
@@ -40,46 +53,74 @@ function daFare(faccende: DonetickChore[], domenica: Giorno, adesso: Date) {
   });
 }
 
+// Minuti di faccende per persona e per giorno della settimana ("insieme" conta per entrambi; palestra e visite no)
+export type CaricoGiorni = Record<string, Partial<Record<SiglaGiorno, number>>>;
+
+export type GiornoPieno = {
+  giorno: SiglaGiorno;
+  persona: string;
+  minuti: number;
+  diSolito: number;
+  altra: string;
+  minutiAltra: number;
+  daPassare: number;
+};
+
+const SOGLIA_MINUTI = 15;
+const FERIALI: SiglaGiorno[] = ["lun", "mar", "mer", "gio", "ven"];
+
+// I giorni in cui, dopo il cambio, qualcuno ha molto più del solito e più dell'altra persona.
+// daPassare: quanti minuti converrebbe dare all'altra, senza invertire il carico.
+export function giorniPiuPieni(cat: Catalogo, adesso: CaricoGiorni, diSolito: CaricoGiorni): GiornoPieno[] {
+  const pieni: GiornoPieno[] = [];
+  for (const giorno of SIGLE_GIORNI) {
+    for (const persona of cat.persone) {
+      const minuti = adesso[persona]?.[giorno] ?? 0;
+      const solito = diSolito[persona]?.[giorno] ?? 0;
+      const [altra, minutiAltra] = cat.persone
+        .filter((x) => x !== persona)
+        .map((x) => [x, adesso[x]?.[giorno] ?? 0] as const)
+        .sort((a, b) => a[1] - b[1])[0] ?? ["", 0];
+      if (!altra || minuti - solito < SOGLIA_MINUTI || minuti <= minutiAltra) continue;
+      const daPassare = Math.min(minuti - solito, Math.floor((minuti - minutiAltra) / 2));
+      if (daPassare >= 10) pieni.push({ giorno, persona, minuti, diSolito: solito, altra, minutiAltra, daPassare });
+    }
+  }
+  return pieni;
+}
+
 export async function inviaEvento(
   client: Donetick,
   cat: Catalogo,
   membri: Membro[],
   domenica: Giorno,
-  minutiSettimana: Record<string, number>,
+  carico: { adesso: CaricoGiorni; diSolito: CaricoGiorni },
   adesso = new Date(),
+  prova = false, // l'assistente risponde, ma Casa valuta senza applicare
 ): Promise<string> {
   if (!config.n8nWebhook || !config.n8nToken) return "assistente non configurato";
+  const pieni = giorniPiuPieni(cat, carico.adesso, carico.diSolito);
+  if (pieni.length === 0) return "niente da ribilanciare";
+  // Candidati: le faccende di chi ha il giorno pieno che l'altra persona può fare alla stessa ora.
+  // Casa decide cosa è possibile, l'LLM sceglie tra queste.
   const voci = new Map(cat.faccende.map((v) => [v.id, v]));
-  const faccende = daFare(await client.faccende(false), domenica, adesso).map((c) => {
+  const candidati = daFare(await client.faccende(false), domenica, adesso).flatMap((c) => {
     const voce = voci.get(leggiMarcatore(c)?.id ?? "");
-    return {
-      choreId: c.id,
-      nome: voce?.nome ?? c.name,
-      chi: personaDi(c, cat, membri),
-      quando: c.nextDueDate,
-      giorno: sigla(giornoDi(new Date(c.nextDueDate!))),
-      ora: oraLocale(new Date(c.nextDueDate!)),
-      minuti: voce?.minuti ?? 0,
-      legataAllaSede: Boolean(voce?.sede),
-    };
+    const t = new Date(c.nextDueDate!);
+    const pieno = pieni.find((p) => p.giorno === sigla(giornoDi(t)) && p.persona === personaDi(c, cat, membri));
+    // Mai le faccende personali né quelle che da sole supererebbero di molto i minuti da passare
+    if (!voce || voce.sede || voce.chi === "ciascuno" || !voce.minuti || !pieno) return [];
+    if (voce.minuti > pieno.daPassare + 5 || impedimento(pieno.altra, t, cat)) return [];
+    return [{ choreId: c.id, nome: voce.nome, giorno: pieno.giorno, ora: oraLocale(t), minuti: voce.minuti, da: pieno.persona, a: pieno.altra }];
   });
+  if (candidati.length === 0) return "niente da ribilanciare: nessuna faccenda si può passare";
   const corpo = {
     settimana: isoGiorno(domenica),
-    adesso: adesso.toISOString(),
-    persone: cat.persone,
-    personaConSede: cat.personaConSede,
+    prova,
     giorniInSede: cat.sedeDellaSettimana(domenica),
-    fuoriCasaInSede: cat.fuoriCasaInSede,
-    impegni: cat.impegni,
-    minutiSettimana,
+    giorniPiuPieni: pieni,
+    candidati,
     massimoProposte: MASSIMO_PROPOSTE,
-    regole: [
-      "Nessuna faccenda dal tramonto del venerdì al tramonto del sabato.",
-      `Chi è in sede è fuori casa nella fascia ${cat.fuoriCasaInSede.join("-")} dei giorni in sede.`,
-      "Le faccende 'insieme' non cambiano persona.",
-      "Le faccende legate alla sede non si spostano: le gestisce Casa.",
-    ],
-    faccende,
   };
   const r = await fetch(config.n8nWebhook, {
     method: "POST",
@@ -87,7 +128,12 @@ export async function inviaEvento(
     body: JSON.stringify(corpo),
     signal: AbortSignal.timeout(10_000),
   });
-  return `n8n ha risposto ${r.status}`;
+  return `n8n ha risposto ${r.status} (${candidati.length} candidati)`;
+}
+
+function minutiDelGiorno(t: Date): number {
+  const { ore, minuti } = parti(t);
+  return ore * 60 + minuti;
 }
 
 function dentroFascia(t: Date, fascia: string): boolean {
@@ -106,6 +152,11 @@ export function impedimento(persona: string, t: Date, cat: Catalogo): string | n
   for (const fascia of cat.impegni[persona]?.[sigla(g)] ?? []) {
     if (dentroFascia(t, fascia)) return `${persona} ha un impegno ${fascia}`;
   }
+  if (persona === cat.personaConSede && FERIALI.includes(sigla(g)) && !cat.sedeDellaSettimana(domenicaDi(g)).includes(sigla(g))) {
+    for (const fascia of cat.lavoroRemoto) {
+      if (dentroFascia(t, fascia)) return `${persona} lavora da remoto ${fascia}`;
+    }
+  }
   return null;
 }
 
@@ -117,6 +168,7 @@ export async function applicaProposte(
   proposte: Proposta[],
   statoPercorso: string,
   adesso = new Date(),
+  prova = false, // valuta e basta: niente spostamenti, niente registro
 ) {
   const stato = leggiStato(statoPercorso);
   const voci = new Map(cat.faccende.map((v) => [v.id, v]));
@@ -128,7 +180,7 @@ export async function applicaProposte(
     const registra = (applicata: boolean, azione: string, nome = "") => {
       const voce = { choreId: p.choreId, applicata, azione, motivo: p.motivo ?? "" };
       esiti.push(voce);
-      stato.registro.push({ quando: adesso.toISOString(), settimana: isoGiorno(settimana), nome, ...voce });
+      if (!prova) stato.registro.push({ quando: adesso.toISOString(), settimana: isoGiorno(settimana), nome, ...voce });
     };
     if (i >= MASSIMO_PROPOSTE) {
       registra(false, `scartata: oltre il limite di ${MASSIMO_PROPOSTE} proposte`);
@@ -165,6 +217,12 @@ export async function applicaProposte(
       registra(false, "scartata: la nuova data non è in questa settimana o è già passata", nome);
       continue;
     }
+    const spostamento = p.quando ? minutiDelGiorno(quando) - minutiDelGiorno(new Date(c.nextDueDate!)) : 0;
+    const macchine = voce ? macchineOltre(voce, giornoDi(quando), cat, spostamento)[0] : undefined;
+    if (macchine) {
+      registra(false, `scartata: ${macchine}`, nome);
+      continue;
+    }
     const chiControlla = chi === "insieme" ? cat.persone : [chi];
     const ostacolo = chiControlla.map((x) => impedimento(x, quando, cat)).find(Boolean);
     if (ostacolo) {
@@ -172,6 +230,11 @@ export async function applicaProposte(
       continue;
     }
     const azioni: string[] = [];
+    if (prova) {
+      const cosa = [p.quando ? `spostarla a ${quando.toISOString()}` : "", p.chi && chi !== attuale ? `passarla a ${chi}` : ""].filter(Boolean);
+      registra(cosa.length > 0, cosa.length ? `in prova: si potrebbe ${cosa.join(" e ")}` : "nessun cambiamento", nome);
+      continue;
+    }
     if (p.quando && quando.getTime() !== new Date(c.nextDueDate!).getTime()) {
       await client.spostaScadenza(c.id, quando);
       azioni.push(`spostata a ${quando.toISOString()}`);
@@ -190,7 +253,7 @@ export async function applicaProposte(
   }
   // Il registro tiene le ultime 200 voci
   stato.registro = stato.registro.slice(-200);
-  scriviStato(statoPercorso, stato);
+  if (!prova) scriviStato(statoPercorso, stato);
   return esiti;
 }
 

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { leggiCatalogo } from "../src/catalogo.ts";
 import { occorrenze, prossima, settimanaAB } from "../src/calendario.ts";
 import { sabatoCorrenteOProssimo, tramonto } from "../src/sole.ts";
-import { isoGiorno, istanteLocale, leggiGiorno, oraLocale } from "../src/tempo.ts";
+import { giornoDi, isoGiorno, istanteLocale, leggiGiorno, oraLocale } from "../src/tempo.ts";
 
 // I test usano il catalogo di esempio, che sta nel repository; quello vero di casa no.
 const cat = leggiCatalogo(join(import.meta.dirname, "..", "..", "faccende.esempio.yaml"));
@@ -96,6 +96,16 @@ test("hash delle password senza $ e compatibile con il formato vecchio", async (
   assert.ok(verificaPassword("una password di prova", h.replaceAll(":", "$")));
 });
 
+test("il pranzo da portare si prepara la sera prima dei giorni in sede", async () => {
+  const { leggiCatalogo: leggi } = await import("../src/catalogo.ts");
+  const c = leggi(join(import.meta.dirname, "..", "..", "faccende.esempio.yaml"));
+  const giorni = () =>
+    occorrenze(c, leggiGiorno("2026-11-01"), leggiGiorno("2026-11-07")).filter((o) => o.voce.id === "pranzo-sede").map((o) => isoGiorno(giornoDi(o.quando)));
+  assert.deepEqual(giorni(), ["2026-11-01", "2026-11-03"]); // domenica e martedì
+  c.sedeDellaSettimana = (d) => (isoGiorno(d) === "2026-11-01" ? ["mar", "mer"] : c.sedePredefinita);
+  assert.deepEqual(giorni(), ["2026-11-02", "2026-11-03"]); // lunedì e martedì
+});
+
 test("umido legato ai giorni in sede, predefiniti e cambiati", async () => {
   const { leggiCatalogo: leggi } = await import("../src/catalogo.ts");
   const c = leggi(join(import.meta.dirname, "..", "..", "faccende.esempio.yaml"));
@@ -135,4 +145,45 @@ test("vincoli per le proposte dell'assistente", async () => {
   assert.match(impedimento("Anna", ora("2026-11-02", 9), cat)!, /impegno/); // università
   assert.match(impedimento("Luca", ora("2026-11-07", 11), cat)!, /sabato/);
   assert.equal(impedimento("Anna", ora("2026-11-03", 10), cat), null);
+  assert.match(impedimento("Luca", ora("2026-11-03", 16, 30), cat)!, /da remoto/); // martedì da remoto, al lavoro
+  assert.equal(impedimento("Luca", ora("2026-11-03", 13, 30), cat), null); // pausa pranzo
+  assert.equal(impedimento("Luca", ora("2026-11-01", 16, 30), cat), null); // domenica
+});
+
+test("la domenica le scadenze hanno 2 ore di margine", () => {
+  const letto = occorrenze(cat, leggiGiorno("2026-11-01"), leggiGiorno("2026-11-01")).find((o) => o.voce.id === "letto")!;
+  assert.equal(oraLocale(letto.quando), "09:30");
+  const lunedi = occorrenze(cat, leggiGiorno("2026-11-02"), leggiGiorno("2026-11-02")).find((o) => o.voce.id === "letto")!;
+  assert.equal(oraLocale(lunedi.quando), "07:30");
+});
+
+test("una faccenda spostata per la sede che nel giorno liberato c'è già si salta", async () => {
+  const { giaNelGiorno } = await import("../src/lavori.ts");
+  // Luca in sede martedì invece che lunedì: la sua cucina del martedì andrebbe al lunedì, dove c'è quella di Anna
+  assert.equal(giaNelGiorno(voce("cucina-pranzo-luca"), leggiGiorno("2026-11-02"), cat)?.chi, "Anna");
+  assert.equal(giaNelGiorno(voce("cucina-pranzo-luca"), leggiGiorno("2026-11-07"), cat), undefined); // sabato
+});
+
+test("un giorno saltato toglie la voce quel giorno e solo quel giorno", async () => {
+  const { leggiCatalogo: leggi } = await import("../src/catalogo.ts");
+  const c = leggi(join(import.meta.dirname, "..", "..", "faccende.esempio.yaml"));
+  const quando = (g: string) => occorrenze(c, leggiGiorno(g), leggiGiorno(g)).filter((o) => o.voce.id === "cucina-pranzo-anna").length;
+  assert.equal(quando("2026-11-02"), 1);
+  c.saltataIl = (id, g) => id === "cucina-pranzo-anna" && isoGiorno(g) === "2026-11-02";
+  assert.equal(quando("2026-11-02"), 0);
+  assert.equal(quando("2026-11-04"), 1); // mercoledì dopo
+  const p = prossima(c.faccende.find((f) => f.id === "cucina-pranzo-anna")!, istanteLocale(leggiGiorno("2026-11-02"), 0, 0), c)!;
+  assert.equal(isoGiorno(giornoDi(p.quando)), "2026-11-04");
+});
+
+test("macchine ad alto consumo entro il limite del fotovoltaico", async () => {
+  const { macchineOltre } = await import("../src/catalogo.ts");
+  const bucato = voce("bucato");
+  const g = leggiGiorno("2026-11-03");
+  assert.deepEqual(macchineOltre(bucato, g, cat), []); // lavatrice 9:00 → 11:00, asciugatrice 11:30 → 13:30
+  const tardi = { ...bucato, macchine: { lavatrice: "10:00", asciugatrice: "16:00" } };
+  assert.deepEqual(macchineOltre(tardi, g, cat), ["asciugatrice da 16:00 finisce alle 18:00, dopo le 15:30"]);
+  assert.equal(macchineOltre(bucato, g, cat, 150).length, 1); // spostata di 2 h 30: l'asciugatrice finisce alle 16:00
+  assert.deepEqual(macchineOltre(tardi, leggiGiorno("2027-04-01"), cat), []); // vincolo scaduto
+  for (const v of cat.faccende) assert.deepEqual(macchineOltre(v, g, cat), [], v.id); // l'esempio rispetta la regola
 });

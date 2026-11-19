@@ -6,13 +6,14 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { creaSessione, DURATA_SESSIONE_S, leggiSessione, troppiTentativi, verificaPassword } from "./accesso.ts";
-import { type Occorrenza, occorrenze } from "./calendario.ts";
 import type { Catalogo } from "./catalogo.ts";
 import { config } from "./config.ts";
 import { type DonetickChore, leggiMarcatore, type Membro } from "./donetick.ts";
 import { leggiSole } from "./fotovoltaico.ts";
 import { listaSpesa } from "./spesa.ts";
-import { abbinaGiorni, applicaSede, type Esito, eseguiLavori, fuoriCasa } from "./lavori.ts";
+import { applicaSede, type Esito, eseguiLavori } from "./lavori.ts";
+import { inviaPromemoria } from "./promemoria.ts";
+import { caricoPerGiorno, settimanaDi } from "./settimana.ts";
 import { applicaProposte, inviaEvento, type Proposta, tokenValido } from "./automazioni.ts";
 import { homeAssistant, sincronizzaListe } from "./homeassistant.ts";
 import { catalogo, donetickAdmin, donetickDi, utenteDi } from "./servizi.ts";
@@ -27,8 +28,6 @@ import {
   istanteLocale,
   leggiGiorno,
   oraLocale,
-  parti,
-  SIGLE_GIORNI,
   type SiglaGiorno,
   sigla,
   sommaGiorni,
@@ -80,13 +79,13 @@ app.post("/api/accesso", async (c) => {
 // Proposte dell'assistente (n8n): autenticate con il token condiviso, non con la sessione
 app.post("/api/automazioni/proposte", async (c) => {
   if (!tokenValido(c.req.header("x-casa-token"))) return c.json({ errore: "Token non valido" }, 401);
-  const { settimana, proposte } = await c.req.json<{ settimana: string; proposte: Proposta[] }>();
+  const { settimana, proposte, prova } = await c.req.json<{ settimana: string; proposte: Proposta[]; prova?: boolean }>();
   if (!Array.isArray(proposte)) return c.json({ errore: "proposte deve essere un elenco" }, 400);
   const cat = catalogo();
   const { client, membri: elenco } = await donetickAdmin(cat);
-  const esiti = await applicaProposte(client, cat, elenco, domenicaDi(leggiGiorno(settimana)), proposte, config.stato);
-  for (const e of esiti) console.log(`[assistente] ${e.choreId}: ${e.azione}`);
-  await lavoriCompleti().catch((e) => console.error("[lavori]", (e as Error).message));
+  const esiti = await applicaProposte(client, cat, elenco, domenicaDi(leggiGiorno(settimana)), proposte, config.stato, new Date(), prova === true);
+  for (const e of esiti) console.log(`[assistente${prova ? ", prova" : ""}] ${e.choreId}: ${e.azione} (${e.motivo})`);
+  if (!prova) await lavoriCompleti().catch((e) => console.error("[lavori]", (e as Error).message));
   return c.json({ esiti });
 });
 
@@ -163,45 +162,6 @@ app.post("/api/faccende/:id/:azione{fatta|salta}", async (c) => {
   return c.json({ ok: true });
 });
 
-// Una faccenda della persona con i giorni in sede (o da fare insieme) che cade mentre è fuori casa
-// in un nuovo giorno in sede: nella settimana si mostra nel giorno abbinato, dove l'ha spostata Casa.
-function giornoDopoCambioSede(cat: Catalogo, o: Occorrenza, domenica: Giorno): Giorno | null {
-  if (o.voce.sede || !cat.personaConSede || (o.chi !== cat.personaConSede && o.chi !== "insieme")) return null;
-  if (!fuoriCasa(o.quando, cat)) return null;
-  const coppia = abbinaGiorni(cat.sedePredefinita, cat.sedeDellaSettimana(domenica)).find((k) => k.prende === sigla(giornoDi(o.quando)));
-  return coppia ? sommaGiorni(domenica, SIGLE_GIORNI.indexOf(coppia.lascia)) : null;
-}
-
-function settimanaDi(cat: Catalogo, da: Giorno) {
-  const a = sommaGiorni(da, 6);
-  const voci = occorrenze(cat, da, a).map((o) => {
-    let quando = o.quando;
-    const nuovoGiorno = giornoDopoCambioSede(cat, o, da);
-    if (nuovoGiorno) {
-      const { ore, minuti } = parti(quando);
-      quando = istanteLocale(nuovoGiorno, ore, minuti);
-    }
-    return {
-      id: o.voce.id,
-      nome: o.voce.nome,
-      chi: o.chi,
-      giorno: isoGiorno(giornoDi(quando)),
-      ora: oraLocale(quando),
-      minuti: o.voce.minuti,
-      area: o.voce.area,
-      sole: o.voce.sole,
-      spostataDalSabato: o.spostataDalSabato,
-      spostataPerSede: Boolean(nuovoGiorno),
-    };
-  });
-  const minuti: Record<string, number> = {};
-  for (const v of voci) {
-    const chi = v.chi === "insieme" ? cat.persone : [v.chi];
-    for (const p of chi) minuti[p] = (minuti[p] ?? 0) + v.minuti;
-  }
-  return { voci, minuti };
-}
-
 app.get("/api/settimana", (c) => {
   const cat = catalogo();
   const adesso = new Date();
@@ -267,7 +227,11 @@ app.put("/api/sede", async (c) => {
   const esiti = await applicaSede(client, id, domenica, prima, ordinati, aggiornato, adesso);
   esiti.push(...(await lavoriCompleti()));
   // L'assistente riceve il risultato e propone eventuali ribilanciamenti; se non risponde, va bene lo stesso
-  inviaEvento(client, aggiornato, elenco, domenica, settimanaDi(aggiornato, domenica).minuti)
+  const carico = {
+    adesso: caricoPerGiorno(aggiornato, domenica),
+    diSolito: caricoPerGiorno({ ...aggiornato, sedeDellaSettimana: () => aggiornato.sedePredefinita }, domenica),
+  };
+  inviaEvento(client, aggiornato, elenco, domenica, carico)
     .then((r) => console.log(`[assistente] ${r}`))
     .catch((e) => console.error("[assistente]", (e as Error).message));
   return c.json({
@@ -337,6 +301,16 @@ async function lavoriPeriodici() {
     for (const e of await lavoriCompleti()) console.log(`[lavori] ${e.faccenda}: ${e.azione}`);
   } catch (e) {
     console.error("[lavori]", (e as Error).message);
+  }
+  try {
+    // I promemoria su Telegram partono dopo i lavori, così leggono le scadenze già corrette
+    if (config.telegram.token) {
+      const cat = catalogo();
+      const { client, membri } = await donetickAdmin(cat);
+      await inviaPromemoria(client, cat, membri, config.stato);
+    }
+  } catch (e) {
+    console.error("[promemoria]", (e as Error).message);
   } finally {
     lavoriInCorso = false;
   }
@@ -344,14 +318,24 @@ async function lavoriPeriodici() {
 
 // Prima si raccolgono le spunte fatte in Home Assistant, poi si correggono le scadenze,
 // infine si riallineano le liste con il risultato.
+// Se Home Assistant non risponde (per esempio mentre si riavvia) i lavori vanno avanti lo stesso:
+// le liste si riallineano al giro successivo.
 async function lavoriCompleti(): Promise<Esito[]> {
   const cat = catalogo();
   const { client, membri } = await donetickAdmin(cat);
   const ha = homeAssistant();
   const esiti: Esito[] = [];
-  if (ha) esiti.push(...(await sincronizzaListe(ha, await client.faccende(false), membri, cat)));
+  const sincronizza = async () => {
+    if (!ha) return;
+    try {
+      esiti.push(...(await sincronizzaListe(ha, await client.faccende(false), membri, cat)));
+    } catch (e) {
+      console.error("[home assistant]", (e as Error).message);
+    }
+  };
+  await sincronizza();
   esiti.push(...(await eseguiLavori(client, cat, new Date(), config.stato)));
-  if (ha) esiti.push(...(await sincronizzaListe(ha, await client.faccende(false), membri, cat)));
+  await sincronizza();
   return esiti;
 }
 

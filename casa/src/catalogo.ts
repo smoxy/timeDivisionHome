@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import type { Luogo } from "./sole.ts";
-import { type Giorno, type SiglaGiorno, leggiGiorno, SIGLE_GIORNI } from "./tempo.ts";
+import { confronta, type Giorno, type SiglaGiorno, leggiGiorno, leggiOra, SIGLE_GIORNI } from "./tempo.ts";
 
 export type Cadenza =
   | "settimana"
@@ -38,7 +38,8 @@ export type Voce = {
   attivaSe?: { tramontoVenerdiDopo?: string; tramontoVenerdiPrima?: string };
   importa: boolean;
   concetto: string; // voci con lo stesso concetto sono la stessa cosa: se ne mostra una sola
-  sede?: "dentro" | "fuori"; // legata ai giorni in sede di personaConSede
+  sede?: "dentro" | "fuori" | "vigilia"; // legata ai giorni in sede di personaConSede (vigilia: la sera prima)
+  macchine?: Record<string, string>; // macchine ad alto consumo usate -> ora di partenza HH:MM
 };
 
 export type Catalogo = {
@@ -47,11 +48,17 @@ export type Catalogo = {
   settimanaA: Giorno; // domenica da cui partono le settimane A
   personaConSede?: string;
   sedePredefinita: SiglaGiorno[];
+  margineDomenicaMinuti: number; // la domenica le scadenze slittano di tanto, salvo gli appuntamenti
   fuoriCasaInSede: [string, string]; // fascia in cui chi è in sede non è a casa
+  lavoroRemoto: string[]; // fasce "HH:MM-HH:MM" in cui chi ha i giorni in sede lavora, nei feriali da remoto
   // Impegni fissi per persona, come in meta.orari: per giorno "HH:MM-HH:MM" (universita, online, ...)
   impegni: Record<string, Partial<Record<SiglaGiorno, string[]>>>;
   // Giorni in sede della settimana che comincia in quella domenica (predefiniti, salvo modifiche)
   sedeDellaSettimana: (domenica: Giorno) => SiglaGiorno[];
+  // Quel giorno la voce è stata saltata per tutti (da stato.json)
+  saltataIl: (voceId: string, giorno: Giorno) => boolean;
+  // Macchine ad alto consumo (lavatrice, forno, ...) che devono aver finito entro un'ora, finché dura il vincolo
+  macchine: { entro: string; fino?: Giorno; durata: Record<string, number> } | null;
   faccende: Voce[];
 };
 
@@ -117,8 +124,9 @@ export function leggiCatalogo(percorso: string): Catalogo {
       stagione: f.stagione,
       attivaSe: a ? { tramontoVenerdiDopo: a.tramonto_venerdi_dopo, tramontoVenerdiPrima: a.tramonto_venerdi_prima } : undefined,
       importa: f.importa !== false,
+      macchine: macchineDa(id, f.macchine, meta.macchine),
       concetto: String(f.concetto ?? id),
-      sede: f.sede === "dentro" || f.sede === "fuori" ? f.sede : f.sede === undefined ? undefined : errore(id, `sede "${f.sede}" sconosciuta`),
+      sede: f.sede === "dentro" || f.sede === "fuori" || f.sede === "vigilia" ? f.sede : f.sede === undefined ? undefined : errore(id, `sede "${f.sede}" sconosciuta`),
     };
   });
 
@@ -126,14 +134,55 @@ export function leggiCatalogo(percorso: string): Catalogo {
   return {
     persone,
     sedePredefinita,
+    margineDomenicaMinuti: Number(meta.margine_domenica_minuti ?? 0),
     fuoriCasaInSede: personaConSede ? (orari[personaConSede].fuori_casa_in_sede ?? ["06:00", "19:45"]) : ["06:00", "19:45"],
+    lavoroRemoto: personaConSede ? (orari[personaConSede].lavoro_remoto ?? []) : [],
+    macchine: meta.macchine
+      ? {
+          entro: String(meta.macchine.entro),
+          fino: meta.macchine.fino_a === undefined ? undefined : comeGiorno(meta.macchine.fino_a),
+          durata: Object.fromEntries(Object.entries(meta.macchine.durata_minuti ?? {}).map(([k, v]) => [k, Number(v)])),
+        }
+      : null,
     sedeDellaSettimana: () => sedePredefinita,
+    saltataIl: () => false,
     impegni: impegniDa(orari, persone),
     luogo: { nome: meta.luogo?.nome ?? "", lat: Number(meta.luogo?.lat), lon: Number(meta.luogo?.lon) },
     settimanaA: comeGiorno(meta.settimana_A_inizia),
     personaConSede,
     faccende,
   };
+}
+
+function macchineDa(id: string, valore: unknown, regola: any): Record<string, string> | undefined {
+  if (valore === undefined) return undefined;
+  if (typeof valore !== "object" || valore === null || Array.isArray(valore)) errore(id, "macchine deve essere macchina: HH:MM");
+  const macchine: Record<string, string> = {};
+  for (const [nome, ora] of Object.entries(valore)) {
+    if (regola && !(nome in (regola.durata_minuti ?? {}))) errore(id, `macchina "${nome}" senza durata in meta.macchine`);
+    leggiOra(String(ora));
+    macchine[nome] = String(ora);
+  }
+  return macchine;
+}
+
+// Le macchine di una voce che, partendo alle ore previste (spostate di `spostamentoMinuti`), finirebbero
+// dopo il limite del fotovoltaico. Vuoto se il vincolo non c'è o è scaduto.
+export function macchineOltre(voce: Voce, g: Giorno, cat: Catalogo, spostamentoMinuti = 0): string[] {
+  const m = cat.macchine;
+  if (!m || !voce.macchine || (m.fino && confronta(g, m.fino) > 0)) return [];
+  const minuti = (t: string) => {
+    const { ore, minuti: mm } = leggiOra(t);
+    return ore * 60 + mm;
+  };
+  const come = (n: number) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+  const fuori: string[] = [];
+  for (const [nome, ora] of Object.entries(voce.macchine)) {
+    const inizio = minuti(ora) + spostamentoMinuti;
+    const fine = inizio + (m.durata[nome] ?? 0);
+    if (fine > minuti(m.entro)) fuori.push(`${nome} da ${come(inizio)} finisce alle ${come(fine)}, dopo le ${m.entro}`);
+  }
+  return fuori;
 }
 
 function impegniDa(orari: Record<string, any>, persone: string[]) {

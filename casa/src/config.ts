@@ -26,6 +26,9 @@ export const config = {
     token: env("HA_TOKEN"),
     potenza: env("HA_PV_POWER_ENTITY"),
     batteria: env("HA_BATTERY_SOC_ENTITY"),
+    // Consumo della casa e scambio con la rete (positivo = prelievo), per il surplus in tempo reale
+    carico: env("HA_LOAD_POWER_ENTITY"),
+    rete: env("HA_GRID_POWER_ENTITY"),
     // Capacità della batteria e riserva minima, per calcolare l'energia davvero usabile
     batteriaKWh: Number(process.env.HA_BATTERY_CAPACITY_KWH ?? 0),
     batteriaRiservaPct: Number(process.env.HA_BATTERY_RESERVE_PCT ?? 0),
@@ -35,6 +38,11 @@ export const config = {
     todo: (persona: string) => env(`HA_TODO_${persona.toUpperCase()}`),
     // Lista della spesa di Home Assistant: se c'è, Casa usa questa e non quella di Grocy
     spesa: env("HA_SPESA_ENTITY"),
+  },
+  // Promemoria su Telegram: token del bot e, per ogni persona, la sua chat (TELEGRAM_CHAT_ANNA, ...)
+  telegram: {
+    token: env("TELEGRAM_BOT_TOKEN"),
+    chat: (persona: string) => env(`TELEGRAM_CHAT_${persona.toUpperCase()}`),
   },
   // Assistente: webhook di n8n chiamato quando cambiano i giorni in sede, e token condiviso
   n8nWebhook: env("CASA_N8N_WEBHOOK_URL"),

@@ -12,7 +12,10 @@ Un'app per una casa condivisa: faccende, settimana, spesa e fotovoltaico, con il
   - legge da Home Assistant la produzione del fotovoltaico e suggerisce quando far partire le macchine;
   - riporta al giorno dopo le faccende non fatte, una volta sola: una faccenda fatta in ritardo non ricompare subito, e tra faccende con lo stesso `concetto` rimaste indietro se ne vede una;
   - tiene una lista per persona in Home Assistant: ci mette le faccende di oggi e quelle rimaste indietro, e quando una voce viene spuntata la segna fatta in Donetick a nome di chi l'ha spuntata. Una faccenda personale spuntata da un'altra persona torna da fare;
-  - dopo un cambio dei giorni in sede chiede a un assistente (un workflow n8n con un LLM) qualche spostamento per riequilibrare il carico, e applica solo le proposte che rispettano le regole.
+  - dopo un cambio dei giorni in sede chiede a un assistente (un workflow n8n con un LLM) qualche spostamento per riequilibrare il carico, e applica solo le proposte che rispettano le regole;
+  - tiene fuori dal tardo pomeriggio le macchine ad alto consumo (lavatrice, asciugatrice, lavastoviglie, forno), quando la produzione del fotovoltaico cala;
+  - salta un giorno di una faccenda per tutti (la palestra annullata, gli ospiti);
+  - scrive su Telegram a chi lo vuole: al mattino le faccende di oggi, la sera quelle che restano, la sera tardi il memo di domani.
 
 Donetick e Grocy restano originali, aggiornati dalle loro immagini Docker: non sono fork.
 
@@ -115,11 +118,48 @@ Casa legge lo stato delle entità e, se configurate, aggiorna le liste delle fac
 
 Chi ha `sede` in `meta.orari` sceglie in Casa, nella settimana, i propri giorni in sede. Al salvataggio Casa:
 
-1. porta le voci con `sede: dentro` nei nuovi giorni in sede e quelle con `sede: fuori` negli altri;
+1. porta le voci con `sede: dentro` nei nuovi giorni in sede, quelle con `sede: fuori` negli altri e quelle con `sede: vigilia` alla sera prima di ogni giorno in sede;
 2. sposta le sue faccende, e quelle da fare insieme, che cadono nella fascia `fuori_casa_in_sede` di un nuovo giorno in sede al giorno che torna da remoto, alla stessa ora;
-3. se `CASA_N8N_WEBHOOK_URL` è impostato, manda a n8n la settimana con i carichi e i vincoli. Il workflow in `n8n/` chiede all'LLM al massimo 5 proposte e le rimanda a `POST /api/automazioni/proposte`, autenticata con `CASA_N8N_TOKEN`.
+3. confronta il carico di ogni giorno con quello della settimana solita. Se qualcuno ha almeno 15 minuti più del solito e più dell'altra persona, sceglie le sue faccende di quel giorno che l'altra può fare alla stessa ora;
+4. se ci sono candidati e `CASA_N8N_WEBHOOK_URL` è impostato, li manda a n8n. Il workflow in `n8n/` fa scegliere all'LLM al massimo 5 faccende da passare, con il motivo, e le rimanda a `POST /api/automazioni/proposte`, autenticata con `CASA_N8N_TOKEN`. Il modello gira senza ragionamento (`reasoning_effort: none`): con il ragionamento acceso un modello piccolo esaurisce i token prima di rispondere.
 
 Casa controlla ogni proposta (sabato, ore fuori casa, impegni, faccende da fare insieme) prima di applicarla. Un cambio di persona vale per una volta: finita l'occorrenza, la faccenda torna a chi l'aveva prima. Le modifiche applicate e scartate si vedono nella settimana.
+
+## Macchine e fotovoltaico
+
+Se la produzione cala a un'ora precisa, in `meta.macchine` si scrive il limite e per quanto vale (poi si potrà sostituire con un dato dall'impianto):
+
+```yaml
+meta:
+  macchine:
+    entro: "15:30"
+    fino_a: 2027-03-31
+    durata_minuti: {lavatrice: 120, asciugatrice: 120, lavastoviglie: 150, forno: 90}
+```
+
+Le voci che usano una macchina dicono quando parte (l'ultima partenza, se ne ha più d'una): `macchine: {lavatrice: "09:00", asciugatrice: "11:30"}`. Se una partenza più la durata supera il limite, l'import stampa un avviso, e l'assistente non sposta quella voce oltre il limite. Se la partenza è programmata (la lavastoviglie alle 11:00), si scrive l'ora programmata, non quella in cui si carica.
+
+## Saltare un giorno
+
+Per togliere una faccenda in un giorno solo, per tutti (palestra annullata, ospiti):
+
+```bash
+docker compose exec casa node src/cli/salta.ts palestra-gio 2026-11-05
+docker compose exec casa node src/cli/salta.ts palestra-gio 2026-11-05 --ripristina
+```
+
+Il giorno sparisce dalla settimana e Donetick porta la faccenda alla volta dopo. Lo stato sta in `data/casa/stato.json` e si ripulisce da solo.
+
+## Promemoria su Telegram
+
+Con un bot Telegram Casa scrive a ogni persona che ha una chat: alle 9:00 le faccende di oggi e quelle rimaste indietro, alle 18:00 quello che non è ancora stato fatto e quello che resta della giornata, alle 22:00 il memo di domani. Non parte niente se non c'è niente da dire, né nel sabato.
+
+1. Crea il bot con @BotFather e metti `TELEGRAM_BOT_TOKEN` nel `.env` sul server.
+2. Ogni persona apre il bot e preme Start.
+3. `docker compose exec casa node src/cli/telegram.ts --chat` mostra i chat id: metti `TELEGRAM_CHAT_<PERSONA>` nel `.env` e riavvia Casa.
+4. `--prova <persona>` manda un messaggio di prova, `--anteprima <persona> mattina|sera|domani` mostra il testo con i dati veri senza inviarlo.
+
+Lo stato fatto o non fatto lo prende da Donetick; se Casa era ferma, un messaggio si recupera fino a 90 minuti dopo l'ora. Le cose rimaste indietro sono tante? Se ne mostrano le sei più recenti.
 
 ## Cambiare le faccende
 

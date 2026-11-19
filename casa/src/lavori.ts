@@ -1,16 +1,17 @@
 // Lavori periodici: correggono in Donetick quello che le sue ricorrenze non sanno fare.
+//  - saltate: una faccenda con scadenza in un giorno saltato passa all'occorrenza dopo
 //  - mesi: le regole "N-esimo giorno del mese" solo nei mesi giusti (pari, dispari, ogni 3 mesi)
 //  - stagioni: archivia e ripristina le faccende con attiva_se
 //  - ritardo: una faccenda fatta in ritardo vale anche per oggi, non ricompare subito
 //  - doppioni: tra faccende con lo stesso concetto rimaste indietro se ne tiene una sola
 //  - sabato: niente scade dal tramonto del venerdì al tramonto del sabato
 
-import { attivaIl, cadeIl, meseAmmesso, prossima } from "./calendario.ts";
-import type { Catalogo } from "./catalogo.ts";
+import { attivaIl, cadeIl, margineDelGiorno, meseAmmesso, type Occorrenza, occorrenze, orarioPrevisto, prossima } from "./calendario.ts";
+import type { Catalogo, Voce } from "./catalogo.ts";
 import { type Donetick, type DonetickChore, leggiMarcatore } from "./donetick.ts";
 import { dopoIlSabato, nelSabato, sabatoCorrenteOProssimo, sabatoDelVenerdi } from "./sole.ts";
 import { leggiStato, scriviStato } from "./stato.ts";
-import { confronta, type Giorno, giornoDi, istanteLocale, oraLocale, parti, SIGLE_GIORNI, type SiglaGiorno, sommaGiorni } from "./tempo.ts";
+import { confronta, type Giorno, giornoDi, isoGiorno, istanteLocale, oraLocale, parti, SIGLE_GIORNI, type SiglaGiorno, sommaGiorni } from "./tempo.ts";
 
 export type Esito = { faccenda: string; azione: string };
 
@@ -64,9 +65,23 @@ export async function eseguiLavori(client: Donetick, cat: Catalogo, adesso = new
     esiti.push({ faccenda: c.name, azione: `portata al giorno giusto per la sede: ${p.quando.toISOString()}` });
   }
 
+  // Giorni saltati: se la scadenza è finita in un giorno in cui la voce non c'è, si va all'occorrenza dopo
+  for (const c of attive) {
+    const voce = voci.get(leggiMarcatore(c)?.id ?? "");
+    if (!voce) continue;
+    const g = giornoDi(new Date(c.nextDueDate!));
+    if (!cat.saltataIl(voce.id, g)) continue;
+    const p = prossima(voce, istanteLocale(sommaGiorni(g, 1)), cat);
+    if (!p) continue;
+    await client.spostaScadenza(c.id, p.quando);
+    c.nextDueDate = p.quando.toISOString();
+    esiti.push({ faccenda: c.name, azione: `${isoGiorno(g)} saltata, prossima il ${p.quando.toISOString()}` });
+  }
+
   // Riassegnazioni temporanee dell'assistente: finita l'occorrenza, torna l'assegnatario di prima
   if (statoPercorso) {
     const stato = leggiStato(statoPercorso);
+    let cambiato = false;
     const rimaste = [];
     for (const r of stato.riassegnazioni) {
       const c = tutte.find((x) => x.id === r.choreId);
@@ -82,8 +97,18 @@ export async function eseguiLavori(client: Donetick, cat: Catalogo, adesso = new
     }
     if (rimaste.length !== stato.riassegnazioni.length) {
       stato.riassegnazioni = rimaste;
-      scriviStato(statoPercorso, stato);
+      cambiato = true;
     }
+    // I giorni saltati già passati non servono più
+    const oggi = isoGiorno(giornoDi(adesso));
+    for (const [id, date] of Object.entries(stato.saltate)) {
+      const future = date.filter((d) => d >= oggi);
+      if (future.length === date.length) continue;
+      if (future.length > 0) stato.saltate[id] = future;
+      else delete stato.saltate[id];
+      cambiato = true;
+    }
+    if (cambiato) scriviStato(statoPercorso, stato);
   }
 
   // Ritardo: Donetick calcola la prossima scadenza da quella saltata, quindi una faccenda
@@ -131,6 +156,20 @@ export async function eseguiLavori(client: Donetick, cat: Catalogo, adesso = new
     }
   }
 
+  // Domenica: più margine. Donetick tiene l'orario del catalogo; se una scadenza di domenica è
+  // ancora a quell'orario, la si porta all'orario con il margine (una volta sola).
+  for (const c of attive) {
+    const voce = voci.get(leggiMarcatore(c)?.id ?? "");
+    if (!voce?.ora) continue;
+    const scadenza = new Date(c.nextDueDate!);
+    const g = giornoDi(scadenza);
+    if (margineDelGiorno(voce, g, cat) === 0 || oraLocale(scadenza) !== voce.ora.padStart(5, "0")) continue;
+    const conMargine = orarioPrevisto(voce, g, cat);
+    await client.spostaScadenza(c.id, conMargine);
+    c.nextDueDate = conMargine.toISOString();
+    esiti.push({ faccenda: c.name, azione: `domenica: più margine, scade alle ${oraLocale(conMargine)}` });
+  }
+
   // Sabato: controlla il sabato in corso e i due successivi
   const finestre = [sabatoCorrenteOProssimo(adesso, cat.luogo)];
   for (let i = 1; i <= 2; i++) finestre.push(sabatoDelVenerdi(sommaGiorni(finestre[0].venerdi, 7 * i), cat.luogo));
@@ -162,6 +201,8 @@ export function fuoriCasa(t: Date, cat: Catalogo): boolean {
 
 // Le faccende di chi ha i giorni in sede (e quelle da fare insieme) che cadono mentre è fuori casa
 // in un nuovo giorno in sede passano, alla stessa ora, al giorno abbinato che torna da remoto.
+// Se in quel giorno la stessa cosa c'è già (stesso concetto, di chiunque: la cucina dopo pranzo,
+// la lavastoviglie) quella volta si salta e la faccenda riparte dall'occorrenza dopo.
 // Le voci con "sede" non si toccano qui: le sistema la regola "sede" di eseguiLavori.
 export async function applicaSede(
   client: Donetick,
@@ -179,11 +220,20 @@ export async function applicaSede(
   const giornoDiSigla = (s: SiglaGiorno) => sommaGiorni(domenica, SIGLE_GIORNI.indexOf(s));
   for (const c of await client.faccende(false)) {
     if (!c.isActive || !c.nextDueDate || !assegnataA(c, idPersona)) continue;
-    if (voci.get(leggiMarcatore(c)?.id ?? "")?.sede) continue;
+    const voce = voci.get(leggiMarcatore(c)?.id ?? "");
+    if (voce?.sede) continue;
     const scadenza = new Date(c.nextDueDate);
     if (scadenza <= adesso || !fuoriCasa(scadenza, cat)) continue;
     const coppia = coppie.find((k) => confronta(giornoDiSigla(k.prende), giornoDi(scadenza)) === 0);
     if (!coppia) continue;
+    const doppione = voce && giaNelGiorno(voce, giornoDiSigla(coppia.lascia), cat);
+    if (voce && doppione) {
+      const p = prossima(voce, istanteLocale(sommaGiorni(giornoDi(scadenza), 1)), cat);
+      if (!p) continue;
+      await client.spostaScadenza(c.id, p.quando);
+      esiti.push({ faccenda: c.name, azione: `saltata per questa volta: quel giorno c'è già "${doppione.voce.nome}" (${doppione.chi})` });
+      continue;
+    }
     const { ore, minuti } = parti(scadenza);
     let nuova = istanteLocale(giornoDiSigla(coppia.lascia), ore, minuti);
     if (nuova <= adesso) {
@@ -196,6 +246,10 @@ export async function applicaSede(
     esiti.push({ faccenda: c.name, azione: `spostata a ${nuova.toISOString()} per il cambio dei giorni in sede` });
   }
   return esiti;
+}
+
+export function giaNelGiorno(voce: Voce, g: Giorno, cat: Catalogo): Occorrenza | undefined {
+  return occorrenze(cat, g, g).find((o) => o.voce.concetto === voce.concetto);
 }
 
 export function assegnataA(c: DonetickChore, idPersona: number): boolean {

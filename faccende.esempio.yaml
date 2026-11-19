@@ -20,16 +20,26 @@
 # importa:         false per le voci che non vanno in Donetick
 # concetto:        voci diverse che sono la stessa cosa: se una è rimasta indietro e l'altra è di oggi, se ne vede una sola
 # sede:            dentro = solo nei giorni in sede della settimana; fuori = solo nei suoi giorni che non sono in sede
+# macchine:        macchine ad alto consumo che la voce usa, con l'ora di partenza (l'ultima, se parte più volte).
+#                  Con meta.macchine, parte + durata deve stare entro il limite: altrimenti avviso all'import
 
 meta:
   persone: [Anna, Luca]
   luogo: {nome: "Roma", lat: 41.9028, lon: 12.4964, fuso: Europe/Rome}
   inizio: 2026-10-25
   settimana_A_inizia: 2026-10-25
+  # La domenica le scadenze slittano di 2 ore (non gli appuntamenti come la palestra)
+  margine_domenica_minuti: 120
+  # Macchine ad alto consumo: finite entro le 15:30, quando la produzione fotovoltaica cala (fino al 31 marzo)
+  macchine:
+    entro: "15:30"
+    fino_a: 2027-03-31
+    durata_minuti: {lavatrice: 120, asciugatrice: 120, lavastoviglie: 150, forno: 90}
   orari:
     Luca:
       sede: [lun, mer]
       fuori_casa_in_sede: ["06:00", "19:45"]
+      lavoro_remoto: ["09:00-13:00", "14:00-18:00"]
       remoto: [mar, gio, ven]
     Anna:
       universita: {lun: "8:00-13:00", mer: "8:00-13:00"}
@@ -75,6 +85,7 @@ faccende:
     ogni: settimana
     minuti: 20
     ora: "20:30"
+    macchine: {lavastoviglie: "11:00"}
     sole: true
   - id: cena-sabato
     nome: Cena semplice dopo il tramonto del sabato
@@ -92,6 +103,7 @@ faccende:
     ogni: settimana
     minuti: 35
     ora: "07:45"
+    macchine: {lavatrice: "09:00", asciugatrice: "11:30"}
     sole: true
   - id: robot
     nome: Robot aspirapolvere (programmato)
@@ -121,6 +133,34 @@ faccende:
     ora: "21:30"
     sede: dentro
     concetto: umido
+  - id: pranzo-sede
+    nome: Preparare il pranzo da portare in sede il giorno dopo
+    area: cucina
+    chi: Luca
+    giorni: [dom, mar]
+    ogni: settimana
+    minuti: 10
+    ora: "21:30"
+    sede: vigilia
+  # Chi è a casa a pranzo pulisce la cucina: un giorno per uno, con lo stesso concetto
+  - id: cucina-pranzo-anna
+    nome: Pulire la cucina dopo pranzo
+    area: cucina
+    chi: Anna
+    giorni: [lun, mer]
+    ogni: settimana
+    minuti: 10
+    ora: "14:00"
+    concetto: cucina-pranzo
+  - id: cucina-pranzo-luca
+    nome: Pulire la cucina dopo pranzo
+    area: cucina
+    chi: Luca
+    giorni: [mar, gio, ven]
+    ogni: settimana
+    minuti: 10
+    ora: "13:45"
+    concetto: cucina-pranzo
   - id: lavare-sotto
     nome: Lavare a terra il piano di sotto
     area: pavimenti

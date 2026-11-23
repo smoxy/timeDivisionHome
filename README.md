@@ -110,9 +110,21 @@ Con Home Assistant servono:
 
 Casa legge lo stato delle entità e, se configurate, aggiorna le liste delle faccende.
 
-**Macchine e fotovoltaico.** Le macchine ad alto consumo (lavatrice, asciugatrice, lavastoviglie, forno, vedi `meta.macchine`) devono aver finito prima che la produzione cali. L'ora limite non è fissa: ogni giorno Casa chiede a Home Assistant la previsione di Forecast.Solar (`energy/solar_forecast`, via websocket) e la fissa alla fine dell'ultima ora in cui si prevedono almeno `soglia_kw` kW (1,5 se non indicata). La previsione è corretta con quanto il sole ha reso davvero stamattina, letto da `HA_PV_TODAY_ENTITY` (rapporto tra reale e previsto, tra 0,5 e 1,5, solo dopo che è passata almeno un'ora di sole). Se nessuna ora raggiunge la soglia, Casa scrive che oggi il sole non basta. Se la previsione manca vale l'ora di riserva `entro`. L'ora limite compare in Oggi, nel promemoria del mattino su Telegram e nel controllo delle proposte dell'assistente (per oggi). Si rilegge ogni 10 minuti.
+**Macchine e fotovoltaico.** Le macchine ad alto consumo (lavatrice, asciugatrice, lavastoviglie, forno, vedi `meta.macchine`) devono aver finito prima che la produzione cali. L'ora limite non è fissa: ogni giorno Casa chiede a Home Assistant la previsione di Forecast.Solar (`energy/solar_forecast`, via websocket) e la fissa alla fine dell'ultima ora in cui si prevedono almeno `soglia_kw` kW (1,5 se non indicata). La previsione è corretta con quanto il sole ha reso davvero nell'ultima ora, letto da `HA_PV_TODAY_ENTITY` (rapporto tra reale e previsto, tra 0,5 e 1,5, sui campioni di oggi degli ultimi 40–75 minuti). Finché l'ultima ora non si può giudicare, per pochi campioni o poco sole previsto, vale il rapporto di tutta la mattina, e solo dopo che è passata almeno un'ora di sole. Se nessuna ora raggiunge la soglia, Casa scrive che oggi il sole non basta. Se la previsione manca vale l'ora di riserva `entro`. L'ora limite compare in Oggi, nel promemoria del mattino su Telegram e nel controllo delle proposte dell'assistente (per oggi). Si rilegge ogni 10 minuti.
 
 Casa la scrive in Home Assistant, non è Home Assistant a chiederla: a ogni giro dei lavori (ogni due minuti) calcola l'ora limite di oggi e, solo se è cambiata dall'ultima volta, chiama `input_datetime.set_datetime` su `HA_ORA_LIMITE_ENTITY` (data e ora di oggi) e `input_text.set_value` su `HA_MOTIVO_ORA_LIMITE_ENTITY` (`previsione`, `poco sole` o `senza previsione`). Se oggi il sole non basta l'`input_datetime` va a mezzanotte di oggi e conta il motivo. Un `senza previsione` passeggero non cancella un valore buono già scritto oggi. Gli errori si registrano e non fermano i lavori; se la scrittura non riesce si riprova al giro dopo. Nei due helper (da creare in Home Assistant, per esempio in un package YAML) i template usano l'ora solo se la data è oggi: con `previsione` vale quell'ora, con `poco sole` le macchine sono fuori limite tutto il giorno, altrimenti 15:30 da novembre a marzo e nessun limite da aprile a ottobre. Basta un utente non amministratore: i servizi `input_datetime` e `input_text` non richiedono permessi speciali.
+
+**Semaforo delle macchine.** Con la stessa previsione Casa scrive in Home Assistant altri tre helper, se sono configurati tutti e tre:
+- `HA_SOLE_RESTANTE_ENTITY` (`input_number`, in kWh): il sole previsto da adesso a sera, già corretto dal rapporto;
+- `HA_ORA_MIGLIORE_ENTITY` (`input_text`, almeno 5 caratteri): l'ora `HH:MM` più avanti, entro l'ora limite, che dà almeno il 15% di sole in più dell'ora in corso, oppure vuoto se adesso va bene;
+- `HA_RAPPORTO_SOLE_ENTITY` (`input_number`): il rapporto reale/previsto usato.
+
+Si riscrivono quando cambiano, e comunque ogni 10 minuti: così Home Assistant capisce se Casa è viva e può ignorare valori più vecchi di mezz'ora. Con `senza previsione` non si scrive niente. Per gli `input_number` bastano min 0, un max abbondante (per esempio 80 kWh e 3) e passo 0,1 e 0,01.
+
+In Home Assistant il semaforo combina questi valori con la media del surplus e la carica della batteria:
+- SÌ se il sole che resta, tolto il consumo di base fino al tramonto e lo spazio libero in batteria, avanza almeno di quanto consuma una macchina;
+- ASPETTA fino all'ora migliore, se ce n'è una prima del limite;
+- SÌ subito, se non ce n'è.
 
 Facoltativo: Home Assistant può anche leggerla da `GET /api/ha/macchine`, con l'header `x-casa-token` uguale a `CASA_HA_TOKEN` (senza token valido, 401), per esempio con un sensore REST. Serve solo se Home Assistant raggiunge Casa:
 

@@ -126,3 +126,60 @@ test("le chiavi della previsione sono la fine dell'ora: l'ora limite è la fine 
   assert.equal(ore[2].inizio.toISOString(), "2026-11-20T11:00:00.000Z"); // la chiave 13:00 è l'ora 12:00-13:00
   assert.equal(calcolaOraLimite({ ore, adesso, sogliaKW: 1.5 }).oraLimite, "14:00");
 });
+
+// --- Rapporto dell'ultima ora e previsione per il semaforo delle macchine
+
+import { aggiungiCampione, previsioneMacchine, previstoTra, rapportoUltimaOra, type Campione } from "../src/oralimite.ts";
+
+const campioniOgni10 = (da: string, a_: string, kwhDa: number, kwhOra: number): Campione[] => {
+  const t0 = a(da).getTime(), t1 = a(a_).getTime();
+  const out: Campione[] = [];
+  for (let t = t0; t <= t1; t += 10 * 60_000) out.push({ t, kwh: kwhDa + (kwhOra * (t - t0)) / 3600_000 });
+  return out;
+};
+
+test("previstoTra prende le ore per la parte che cade nell'intervallo", () => {
+  assert.equal(previstoTra(sereno, a("10:30").getTime(), a("11:30").getTime()), 1000 + 1400);
+  assert.equal(previstoTra(sereno, a("06:00").getTime(), a("08:00").getTime()), 0);
+});
+
+test("rapporto dell'ultima ora: il sole di adesso, non quello della mattina", () => {
+  // dalle 10:00 alle 11:00 previsti 2000 Wh, prodotti 2,8 kWh: 1,4
+  const c = campioniOgni10("10:00", "11:00", 1.0, 2.8);
+  assert.equal(Math.round(rapportoUltimaOra(sereno, c, a("11:00"))! * 100) / 100, 1.4);
+  // la mattina intera direbbe altro, ma il recente vince nell'ora limite
+  const r = calcolaOraLimite({ ore: sereno, prodottoOggiKWh: 1.0, rapportoRecente: 1.4, adesso: a("11:00"), sogliaKW: 1.5 });
+  assert.equal(r.rapporto, 1.4);
+});
+
+test("rapporto dell'ultima ora: niente se mancano campioni o sole", () => {
+  assert.equal(rapportoUltimaOra(sereno, campioniOgni10("10:30", "11:00", 1, 2), a("11:00")), undefined); // 30 minuti
+  assert.equal(rapportoUltimaOra(sereno, campioniOgni10("09:00", "10:00", 1, 2), a("11:00")), undefined); // vecchi
+  assert.equal(rapportoUltimaOra(sereno, campioniOgni10("07:00", "08:00", 0, 0.1), a("08:00")), undefined); // alba
+  assert.equal(rapportoUltimaOra(sereno, campioniOgni10("10:00", "11:00", 1, 0.2), a("11:00")), 0.5); // limitato
+});
+
+test("i campioni restano solo di oggi, delle ultime due ore, e ripartono dopo un azzeramento", () => {
+  let c: Campione[] = [];
+  c = aggiungiCampione(c, { t: a("08:00").getTime(), kwh: 1 });
+  c = aggiungiCampione(c, { t: a("09:00").getTime(), kwh: 2 });
+  c = aggiungiCampione(c, { t: a("10:30").getTime(), kwh: 3 });
+  assert.deepEqual(c.map((x) => x.kwh), [2, 3]);
+  c = aggiungiCampione(c, { t: a("10:40").getTime(), kwh: 0.1 });
+  assert.deepEqual(c.map((x) => x.kwh), [0.1]);
+});
+
+test("semaforo: sole che resta e ora migliore entro il limite", () => {
+  // alle 10:00: restano 2000+2800+3000+2900+2800+1600+700 = 15800 Wh; al 50%: 7,9 kWh
+  const p = previsioneMacchine({ ore: sereno, rapporto: 0.5, adesso: a("10:00"), oraLimite: "16:00" });
+  assert.equal(p.solePrevistoKWh, 7.9);
+  assert.equal(p.oraMigliore, "12:00"); // 3000 contro 2000 adesso
+  // alle 12:10 l'ora in corso è la migliore: nessuna attesa
+  assert.equal(previsioneMacchine({ ore: sereno, rapporto: 1, adesso: a("12:10"), oraLimite: "16:00" }).oraMigliore, null);
+  // un'ora migliore oltre il limite non conta
+  assert.equal(previsioneMacchine({ ore: sereno, rapporto: 1, adesso: a("10:00"), oraLimite: "12:00" }).oraMigliore, "11:00");
+  assert.equal(previsioneMacchine({ ore: sereno, rapporto: 1, adesso: a("10:00"), oraLimite: "11:00" }).oraMigliore, null);
+  // poco meglio (sotto il 15% in più) non vale l'attesa
+  const piatto = giorno("2026-11-19", "+01:00", { "10": 2000, "11": 2200, "12": 2100 });
+  assert.equal(previsioneMacchine({ ore: piatto, rapporto: 1, adesso: a("10:00"), oraLimite: null }).oraMigliore, null);
+});

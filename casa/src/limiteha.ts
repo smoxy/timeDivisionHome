@@ -1,5 +1,5 @@
-// Casa scrive in Home Assistant l'ora limite delle macchine di oggi (input_datetime + input_text),
-// così i sensori e le automazioni di Home Assistant non devono interrogare Casa.
+// Casa scrive in Home Assistant l'ora limite delle macchine di oggi (input_datetime + input_text) e i valori
+// del semaforo (sole che resta, ora migliore, rapporto), così Home Assistant non deve interrogare Casa.
 
 import { config } from "./config.ts";
 import type { HomeAssistant } from "./homeassistant.ts";
@@ -23,13 +23,51 @@ export function preparaSpinta(r: OraLimite, adesso: Date, ultima: Spinta | null)
 
 let ultima: Spinta | null = null;
 
+export type Semaforo = { soleKWh: number; oraMigliore: string; rapporto: number; scritto: number };
+const RISCRIVI_MS = 10 * 60_000; // anche invariati, ogni 10 minuti: Home Assistant capisce che Casa è viva
+
+// Valori per il semaforo delle macchine, o null se non sono cambiati e l'ultima scrittura è recente
+export function preparaSemaforo(r: OraLimite, adesso: Date, ultimo: Semaforo | null): Semaforo | null {
+  if (r.motivo === "senza previsione" || r.solePrevistoKWh === undefined) return null;
+  const nuovo: Semaforo = {
+    soleKWh: r.solePrevistoKWh,
+    oraMigliore: r.oraMigliore ?? "",
+    rapporto: Math.round((r.rapporto ?? 1) * 100) / 100,
+    scritto: adesso.getTime(),
+  };
+  if (
+    ultimo &&
+    adesso.getTime() - ultimo.scritto < RISCRIVI_MS &&
+    ultimo.soleKWh === nuovo.soleKWh &&
+    ultimo.oraMigliore === nuovo.oraMigliore &&
+    ultimo.rapporto === nuovo.rapporto
+  )
+    return null;
+  return nuovo;
+}
+
+let ultimoSemaforo: Semaforo | null = null;
+
+async function pubblicaSemaforo(ha: HomeAssistant, r: OraLimite, adesso: Date): Promise<void> {
+  const { soleRestante, oraMigliore, rapportoSole } = config.ha;
+  if (!soleRestante || !oraMigliore || !rapportoSole) return;
+  const s = preparaSemaforo(r, adesso, ultimoSemaforo);
+  if (!s) return;
+  await ha.servizio("input_number", "set_value", { entity_id: soleRestante, value: s.soleKWh });
+  await ha.servizio("input_text", "set_value", { entity_id: oraMigliore, value: s.oraMigliore });
+  await ha.servizio("input_number", "set_value", { entity_id: rapportoSole, value: s.rapporto });
+  ultimoSemaforo = s;
+}
+
 // Da chiamare a ogni giro dei lavori: scrive solo quando il valore cambia. Gli errori si registrano
 // e non fermano niente: se la scrittura non è riuscita al giro dopo si riprova.
 export async function pubblicaOraLimite(ha: HomeAssistant | null, sogliaKW?: number, adesso = new Date()): Promise<void> {
   const { oraLimite: entita, motivoOraLimite: entitaMotivo } = config.ha;
   if (!ha || !entita || !entitaMotivo) return;
   try {
-    const spinta = preparaSpinta(await leggiOraLimite(adesso, sogliaKW), adesso, ultima);
+    const r = await leggiOraLimite(adesso, sogliaKW);
+    await pubblicaSemaforo(ha, r, adesso).catch((e) => console.error("[semaforo]", (e as Error).message));
+    const spinta = preparaSpinta(r, adesso, ultima);
     if (!spinta) return;
     const scriviOra = () => ha.servizio("input_datetime", "set_datetime", { entity_id: entita, datetime: spinta.datetime });
     const scriviMotivo = () => ha.servizio("input_text", "set_value", { entity_id: entitaMotivo, value: spinta.motivo });

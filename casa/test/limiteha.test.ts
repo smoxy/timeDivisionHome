@@ -56,3 +56,16 @@ test("dopo la scrittura di senza previsione, la previsione tornata si scrive", (
   const u = preparaSpinta(senza, a("08:00"), null)!;
   assert.equal(preparaSpinta(prev("16:00"), a("08:10"), u)?.motivo, "previsione");
 });
+
+import { preparaSemaforo } from "../src/limiteha.ts";
+
+test("semaforo: si scrive subito, poi solo se cambia o dopo 10 minuti", () => {
+  const r: OraLimite = { oraLimite: "15:00", motivo: "previsione", rapporto: 1.234, solePrevistoKWh: 7.9, oraMigliore: "12:00" };
+  const u = preparaSemaforo(r, a("10:00"), null)!;
+  assert.deepEqual({ ...u, scritto: 0 }, { soleKWh: 7.9, oraMigliore: "12:00", rapporto: 1.23, scritto: 0 });
+  assert.equal(preparaSemaforo(r, a("10:05"), u), null);
+  assert.notEqual(preparaSemaforo({ ...r, oraMigliore: null }, a("10:05"), u), null);
+  assert.equal(preparaSemaforo({ ...r, oraMigliore: null }, a("10:05"), u)?.oraMigliore, "");
+  assert.notEqual(preparaSemaforo(r, a("10:11"), u), null);
+  assert.equal(preparaSemaforo({ oraLimite: null, motivo: "senza previsione" }, a("10:05"), null), null);
+});

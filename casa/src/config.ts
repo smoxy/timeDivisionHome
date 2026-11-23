@@ -39,6 +39,11 @@ export const config = {
     // Ora limite delle macchine di oggi, scritta da Casa: input_datetime (data e ora) e input_text (motivo)
     oraLimite: env("HA_ORA_LIMITE_ENTITY"),
     motivoOraLimite: env("HA_MOTIVO_ORA_LIMITE_ENTITY"),
+    // Per il semaforo delle macchine, scritti da Casa: sole che resta oggi (input_number, kWh),
+    // ora migliore più avanti (input_text "HH:MM" o vuoto) e rapporto reale/previsto (input_number)
+    soleRestante: env("HA_SOLE_RESTANTE_ENTITY"),
+    oraMigliore: env("HA_ORA_MIGLIORE_ENTITY"),
+    rapportoSole: env("HA_RAPPORTO_SOLE_ENTITY"),
     // Lista delle faccende di ciascuno: HA_TODO_ANNA=todo.faccende_anna, ...
     todo: (persona: string) => env(`HA_TODO_${persona.toUpperCase()}`),
     // Lista della spesa di Home Assistant: se c'è, Casa usa questa e non quella di Grocy

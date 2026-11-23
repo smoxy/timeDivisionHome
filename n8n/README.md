@@ -1,6 +1,6 @@
 # Workflow n8n: ribilanciare le faccende
 
-`ribilancia.json` riceve da Casa l'evento "giorni in sede cambiati", chiede all'LLM di `llm.example.com` al massimo 5 proposte e le rimanda a Casa, che le controlla una per una prima di applicarle.
+`ribilancia.json` riceve da Casa l'evento "giorni in sede cambiati", chiede al massimo 5 proposte a un LLM con l'API in stile OpenAI (nell'esempio `llm.example.com`: mettete il vostro indirizzo nel nodo HTTP) e le rimanda a Casa, che le controlla una per una prima di applicarle.
 
 Credenziali da creare in n8n (tipo "Header Auth"):
 
